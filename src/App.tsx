@@ -798,6 +798,22 @@ export default function App() {
     setViewInitialized(false);
   }, []);
 
+  const handleDeleteGroup = useCallback(() => {
+    if (!activeGroup) return;
+    const confirmText = `Delete group \"${activeGroup.name}\"? This will remove all members and expenses.`;
+    const ok = window.confirm(confirmText);
+    if (!ok) return;
+
+    setState((prev) => ({
+      ...prev,
+      groups: prev.groups.filter((group) => group.id !== activeGroup.id),
+      activeGroupId:
+        prev.activeGroupId === activeGroup.id ? null : prev.activeGroupId
+    }));
+    resetExpenseForm();
+    setView("groups");
+  }, [activeGroup, resetExpenseForm]);
+
   if (!authReady) {
     return (
       <div className="page">
@@ -1117,6 +1133,9 @@ export default function App() {
         </h1>
         <div className="header-actions">
           <div className={`cloud-status ${cloudStatus}`}>{cloudLabel}</div>
+          <button className="link danger" onClick={handleDeleteGroup}>
+            Delete group
+          </button>
           <button className="link" onClick={handleSignOut}>
             Sign out
           </button>

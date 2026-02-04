@@ -274,6 +274,10 @@ button:hover {
   min-height: 0;
 }
 
+.link.danger {
+  color: #b04632;
+}
+
 .muted {
   color: var(--muted);
   margin: 0;
