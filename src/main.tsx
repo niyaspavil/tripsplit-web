@@ -12,3 +12,12 @@ if (root) {
     </React.StrictMode>
   );
 }
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    const swUrl = `${import.meta.env.BASE_URL}sw.js`;
+    navigator.serviceWorker.register(swUrl).catch(() => {
+      // Ignore registration errors in case the browser doesn't support it.
+    });
+  });
+}
