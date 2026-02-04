@@ -61,6 +61,123 @@ type MasterExpense = Expense & {
 const createId = () =>
   `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
+const Icon = ({
+  name,
+  className
+}: {
+  name:
+    | "spark"
+    | "users"
+    | "wallet"
+    | "balance"
+    | "receipt"
+    | "crown"
+    | "list"
+    | "key"
+    | "shield"
+    | "chart";
+  className?: string;
+}) => {
+  const shared = {
+    className,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.8,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true
+  };
+
+  switch (name) {
+    case "spark":
+      return (
+        <svg {...shared}>
+          <path d="M12 3l1.9 4.8L19 9l-5.1 1.2L12 15l-1.9-4.8L5 9l5.1-1.2L12 3z" />
+          <path d="M4 18l.8 2L7 21l-2.2.6L4 24l-.8-2L1 20l2.2-.6L4 18z" />
+        </svg>
+      );
+    case "users":
+      return (
+        <svg {...shared}>
+          <circle cx="8" cy="9" r="3.2" />
+          <circle cx="16.5" cy="10" r="2.5" />
+          <path d="M2.5 19.5c1.2-3 4-4.5 6.5-4.5s5.3 1.5 6.5 4.5" />
+          <path d="M13 18.8c.7-2 2.5-3.3 4.8-3.3 1.6 0 2.9.6 3.7 1.6" />
+        </svg>
+      );
+    case "wallet":
+      return (
+        <svg {...shared}>
+          <path d="M3.5 7.5h15a2 2 0 012 2v6.5a2 2 0 01-2 2h-15a2 2 0 01-2-2V7.5a3 3 0 013-3h11.5" />
+          <path d="M16.5 12.5h4" />
+        </svg>
+      );
+    case "balance":
+      return (
+        <svg {...shared}>
+          <path d="M12 4v16" />
+          <path d="M5 7h14" />
+          <path d="M7 7l-3 6h6l-3-6z" />
+          <path d="M17 7l-3 6h6l-3-6z" />
+        </svg>
+      );
+    case "receipt":
+      return (
+        <svg {...shared}>
+          <path d="M7 3h10a2 2 0 012 2v16l-3-2-3 2-3-2-3 2-3-2V5a2 2 0 012-2z" />
+          <path d="M9 8h6" />
+          <path d="M9 12h6" />
+        </svg>
+      );
+    case "crown":
+      return (
+        <svg {...shared}>
+          <path d="M4 8l4 4 4-6 4 6 4-4-2 10H6L4 8z" />
+          <path d="M7 18h10" />
+        </svg>
+      );
+    case "list":
+      return (
+        <svg {...shared}>
+          <path d="M7 6h12" />
+          <path d="M7 12h12" />
+          <path d="M7 18h12" />
+          <circle cx="3.5" cy="6" r="1" />
+          <circle cx="3.5" cy="12" r="1" />
+          <circle cx="3.5" cy="18" r="1" />
+        </svg>
+      );
+    case "key":
+      return (
+        <svg {...shared}>
+          <circle cx="8" cy="10" r="3.5" />
+          <path d="M11 10h9" />
+          <path d="M17 10v3" />
+          <path d="M20 10v3" />
+        </svg>
+      );
+    case "shield":
+      return (
+        <svg {...shared}>
+          <path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6l7-3z" />
+          <path d="M9.5 12l2 2 3-3" />
+        </svg>
+      );
+    case "chart":
+      return (
+        <svg {...shared}>
+          <path d="M4 19h16" />
+          <path d="M7 15v-4" />
+          <path d="M12 15v-7" />
+          <path d="M17 15v-2" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+};
+
 const roundToCents = (value: number) => Math.round(value * 100) / 100;
 
 const parseAmount = (value: string) => {
@@ -685,7 +802,12 @@ export default function App() {
     return (
       <div className="page">
         <header className="page-header">
-          <h1>TripSplit</h1>
+          <h1 className="app-title">
+            <span className="title-icon">
+              <Icon name="spark" />
+            </span>
+            TripSplit
+          </h1>
           <p className="subtitle">Connecting to your account...</p>
         </header>
       </div>
@@ -696,13 +818,21 @@ export default function App() {
     return (
       <div className="page auth-page">
         <header className="page-header">
-          <h1>TripSplit</h1>
+          <h1 className="app-title">
+            <span className="title-icon">
+              <Icon name="spark" />
+            </span>
+            TripSplit
+          </h1>
           <p className="subtitle">
             Sign in to sync your trips across devices.
           </p>
         </header>
         <section className="card auth-card">
-          <h2>{authMode === "signup" ? "Create account" : "Sign in"}</h2>
+          <div className="section-heading">
+            <Icon name="key" />
+            <h2>{authMode === "signup" ? "Create account" : "Sign in"}</h2>
+          </div>
           <input
             type="email"
             value={authEmail}
@@ -754,7 +884,12 @@ export default function App() {
               Sign out
             </button>
           </div>
-          <h1>Master Dashboard</h1>
+          <h1 className="app-title">
+            <span className="title-icon">
+              <Icon name="chart" />
+            </span>
+            Master Dashboard
+          </h1>
           {cloudStatus === "error" && cloudError ? (
             <div className="cloud-error">{cloudError}</div>
           ) : null}
@@ -764,7 +899,10 @@ export default function App() {
         </header>
 
         <section className="card">
-          <h2>Overview</h2>
+          <div className="section-heading">
+            <Icon name="wallet" />
+            <h2>Overview</h2>
+          </div>
           <div className="stat-row">
             <span>Total spent</span>
             <strong>${formatMoney(totalSpent)}</strong>
@@ -784,7 +922,10 @@ export default function App() {
         </section>
 
         <section>
-          <h2>Group totals</h2>
+          <div className="section-heading">
+            <Icon name="list" />
+            <h2>Group totals</h2>
+          </div>
           {groupTotals.length === 0 ? (
             <p className="muted">No groups yet.</p>
           ) : (
@@ -798,7 +939,10 @@ export default function App() {
         </section>
 
         <section>
-          <h2>Top payers</h2>
+          <div className="section-heading">
+            <Icon name="crown" />
+            <h2>Top payers</h2>
+          </div>
           {memberPaidTotals.length === 0 ? (
             <p className="muted">No expenses yet.</p>
           ) : (
@@ -815,7 +959,10 @@ export default function App() {
         </section>
 
         <section>
-          <h2>All expenses</h2>
+          <div className="section-heading">
+            <Icon name="receipt" />
+            <h2>All expenses</h2>
+          </div>
           {sortedAllExpenses.length === 0 ? (
             <p className="muted">No expenses yet.</p>
           ) : (
@@ -864,7 +1011,12 @@ export default function App() {
     return (
       <div className="page">
         <header className="page-header">
-          <h1>TripSplit</h1>
+          <h1 className="app-title">
+            <span className="title-icon">
+              <Icon name="spark" />
+            </span>
+            TripSplit
+          </h1>
           <div className="header-actions">
             <div className={`cloud-status ${cloudStatus}`}>{cloudLabel}</div>
             <button className="link" onClick={handleSignOut}>
@@ -880,7 +1032,10 @@ export default function App() {
         </header>
 
         <section className="card">
-          <h2>Create a group</h2>
+          <div className="section-heading">
+            <Icon name="users" />
+            <h2>Create a group</h2>
+          </div>
           <input
             value={groupName}
             onChange={(event) => setGroupName(event.target.value)}
@@ -892,7 +1047,10 @@ export default function App() {
         </section>
 
         <section className="card">
-          <h2>Master dashboard</h2>
+          <div className="section-heading">
+            <Icon name="chart" />
+            <h2>Master dashboard</h2>
+          </div>
           <p className="muted">
             See totals across all groups and manage every expense.
           </p>
@@ -902,7 +1060,10 @@ export default function App() {
         </section>
 
         <section>
-          <h2>Your groups</h2>
+          <div className="section-heading">
+            <Icon name="list" />
+            <h2>Your groups</h2>
+          </div>
           {state.groups.length === 0 ? (
             <p className="muted">No groups yet.</p>
           ) : (
@@ -948,7 +1109,12 @@ export default function App() {
         >
           Back to groups
         </button>
-        <h1>{activeGroup.name}</h1>
+        <h1 className="app-title">
+          <span className="title-icon">
+            <Icon name="users" />
+          </span>
+          {activeGroup.name}
+        </h1>
         <div className="header-actions">
           <div className={`cloud-status ${cloudStatus}`}>{cloudLabel}</div>
           <button className="link" onClick={handleSignOut}>
@@ -961,7 +1127,10 @@ export default function App() {
       </header>
 
       <section className="card">
-        <h2>Add members</h2>
+        <div className="section-heading">
+          <Icon name="users" />
+          <h2>Add members</h2>
+        </div>
         <input
           value={memberName}
           onChange={(event) => setMemberName(event.target.value)}
@@ -973,7 +1142,10 @@ export default function App() {
       </section>
 
       <section>
-        <h2>Balances</h2>
+        <div className="section-heading">
+          <Icon name="balance" />
+          <h2>Balances</h2>
+        </div>
         {balances.length === 0 ? (
           <p className="muted">Add members to start splitting.</p>
         ) : (
@@ -989,7 +1161,10 @@ export default function App() {
       </section>
 
       <section>
-        <h2>Settle up</h2>
+        <div className="section-heading">
+          <Icon name="wallet" />
+          <h2>Settle up</h2>
+        </div>
         {settlements.length === 0 ? (
           <p className="muted">Everyone is even or no expenses yet.</p>
         ) : (
@@ -1005,7 +1180,10 @@ export default function App() {
       </section>
 
       <section>
-        <h2>{editingExpenseId ? "Edit expense" : "New expense"}</h2>
+        <div className="section-heading">
+          <Icon name="receipt" />
+          <h2>{editingExpenseId ? "Edit expense" : "New expense"}</h2>
+        </div>
         {activeGroup.members.length === 0 ? (
           <p className="muted">Add members before logging expenses.</p>
         ) : (
@@ -1176,7 +1354,10 @@ export default function App() {
       </section>
 
       <section>
-        <h2>Expenses</h2>
+        <div className="section-heading">
+          <Icon name="list" />
+          <h2>Expenses</h2>
+        </div>
         {activeGroup.expenses.length === 0 ? (
           <p className="muted">No expenses yet.</p>
         ) : (

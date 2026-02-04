@@ -13,7 +13,8 @@
   --accent: #1d1b16;
   --brand: #2f5d50;
   --border: #ece4d7;
-  --shadow: 0 10px 24px rgba(0, 0, 0, 0.06);
+  --shadow: 0 12px 30px rgba(33, 27, 22, 0.08);
+  --shadow-soft: 0 6px 16px rgba(33, 27, 22, 0.08);
 }
 
 * {
@@ -31,6 +32,18 @@ body {
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
   background: radial-gradient(circle at top, #ffffff 0%, #f5f0e9 35%, #efe5d6 100%);
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: -20% -10% auto auto;
+  width: 320px;
+  height: 320px;
+  background: radial-gradient(circle, rgba(47, 93, 80, 0.18), transparent 70%);
+  filter: blur(12px);
+  pointer-events: none;
+  z-index: -1;
 }
 
 #root {
@@ -63,12 +76,35 @@ h1 {
 
 h2 {
   font-size: 20px;
-  margin: 0 0 10px;
+  margin: 0;
 }
 
 .subtitle {
   color: var(--muted);
   margin: 0;
+}
+
+.app-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.title-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #1d1b16;
+  color: #ffffff;
+  box-shadow: var(--shadow-soft);
+}
+
+.title-icon svg {
+  width: 20px;
+  height: 20px;
 }
 
 .header-actions {
@@ -135,6 +171,19 @@ h2 {
   text-align: left;
 }
 
+.section-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+}
+
+.section-heading svg {
+  width: 18px;
+  height: 18px;
+  color: #2f5d50;
+}
+
 section {
   display: flex;
   flex-direction: column;
@@ -175,6 +224,10 @@ button {
   transition: transform 0.15s ease, box-shadow 0.2s ease;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
+}
+
+button:hover {
+  box-shadow: var(--shadow-soft);
 }
 
 .primary {
@@ -220,6 +273,11 @@ button {
 .row.button-row {
   width: 100%;
   text-align: left;
+}
+
+.row.button-row:hover {
+  border-color: #dcd2c3;
+  box-shadow: var(--shadow-soft);
 }
 
 .row-title {
@@ -404,6 +462,15 @@ button:active {
 
   .pill-row {
     gap: 6px;
+  }
+
+  .title-icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .section-heading {
+    gap: 8px;
   }
 }
 
