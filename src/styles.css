@@ -71,6 +71,44 @@ h2 {
   margin: 0;
 }
 
+.cloud-status {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: #f3efe8;
+  color: var(--muted);
+  font-size: 12px;
+  border: 1px solid var(--border);
+}
+
+.cloud-status.ready {
+  background: #e8f4ee;
+  color: #2f7d57;
+  border-color: #d6ebdf;
+}
+
+.cloud-status.syncing,
+.cloud-status.connecting {
+  background: #fef6e7;
+  color: #8a6a2b;
+  border-color: #f0e0c9;
+}
+
+.cloud-status.error {
+  background: #fdecea;
+  color: #b04632;
+  border-color: #f5d1cc;
+}
+
+.cloud-error {
+  color: #b04632;
+  font-size: 12px;
+  margin-top: 6px;
+}
+
 section {
   display: flex;
   flex-direction: column;

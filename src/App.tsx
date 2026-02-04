@@ -1,6 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-
-const STORAGE_KEY = "trip-split-state-web-v1";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  doc,
+  onSnapshot,
+  serverTimestamp,
+  setDoc
+} from "firebase/firestore";
+import { db } from "./firebase";
 
 type Member = {
   id: string;
@@ -28,6 +33,11 @@ type Group = {
 type AppState = {
   groups: Group[];
   activeGroupId: string | null;
+};
+
+const INITIAL_STATE: AppState = {
+  groups: [],
+  activeGroupId: null
 };
 
 type Settlement = {
@@ -161,13 +171,16 @@ const computeSettlements = (
 };
 
 export default function App() {
-  const [state, setState] = useState<AppState>({
-    groups: [],
-    activeGroupId: null
-  });
+  const [state, setState] = useState<AppState>(INITIAL_STATE);
   const [hydrated, setHydrated] = useState(false);
+  const [cloudStatus, setCloudStatus] = useState<
+    "connecting" | "syncing" | "ready" | "error"
+  >("connecting");
+  const [cloudError, setCloudError] = useState("");
   const [view, setView] = useState<"groups" | "group" | "master">("groups");
   const [viewInitialized, setViewInitialized] = useState(false);
+  const skipWriteRef = useRef(false);
+  const docRef = useMemo(() => doc(db, "tripsplit", "state"), []);
 
   const [groupName, setGroupName] = useState("");
   const [memberName, setMemberName] = useState("");
@@ -186,21 +199,64 @@ export default function App() {
   }, [state.groups, state.activeGroupId]);
 
   useEffect(() => {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      try {
-        setState(JSON.parse(raw));
-      } catch {
-        // ignore corrupted storage
+    let initialized = false;
+    const unsubscribe = onSnapshot(
+      docRef,
+      (snapshot) => {
+        if (!snapshot.exists()) {
+          if (!initialized) {
+            initialized = true;
+            setCloudStatus("syncing");
+            setDoc(docRef, {
+              state: INITIAL_STATE,
+              updatedAt: serverTimestamp()
+            }).catch((error) => {
+              setCloudStatus("error");
+              setCloudError(error?.message || "Unable to initialize cloud data.");
+            });
+          }
+          return;
+        }
+
+        const data = snapshot.data() as { state?: AppState } | undefined;
+        if (data?.state) {
+          skipWriteRef.current = true;
+          setState(data.state);
+        }
+        setHydrated(true);
+        setCloudStatus("ready");
+      },
+      (error) => {
+        setCloudStatus("error");
+        setCloudError(error?.message || "Cloud sync failed.");
+        setHydrated(true);
       }
-    }
-    setHydrated(true);
-  }, []);
+    );
+
+    return () => unsubscribe();
+  }, [docRef]);
 
   useEffect(() => {
     if (!hydrated) return;
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }, [state, hydrated]);
+    if (skipWriteRef.current) {
+      skipWriteRef.current = false;
+      return;
+    }
+    setCloudStatus("syncing");
+    setDoc(
+      docRef,
+      {
+        state,
+        updatedAt: serverTimestamp()
+      },
+      { merge: true }
+    )
+      .then(() => setCloudStatus("ready"))
+      .catch((error) => {
+        setCloudStatus("error");
+        setCloudError(error?.message || "Cloud sync failed.");
+      });
+  }, [state, hydrated, docRef]);
 
   useEffect(() => {
     if (!hydrated || viewInitialized) return;
@@ -549,6 +605,13 @@ export default function App() {
     return map;
   }, [state.groups]);
 
+  const cloudLabel =
+    cloudStatus === "ready"
+      ? "Synced"
+      : cloudStatus === "error"
+        ? "Offline"
+        : "Syncing...";
+
   if (view === "master") {
     return (
       <div className="page">
@@ -556,6 +619,10 @@ export default function App() {
           <button className="link" onClick={() => setView("groups")}
             >Back to groups</button>
           <h1>Master Dashboard</h1>
+          <div className={`cloud-status ${cloudStatus}`}>{cloudLabel}</div>
+          {cloudStatus === "error" && cloudError ? (
+            <div className="cloud-error">{cloudError}</div>
+          ) : null}
           <p className="subtitle">
             Overview, totals, and admin control across all trips.
           </p>
@@ -663,6 +730,10 @@ export default function App() {
       <div className="page">
         <header className="page-header">
           <h1>TripSplit</h1>
+          <div className={`cloud-status ${cloudStatus}`}>{cloudLabel}</div>
+          {cloudStatus === "error" && cloudError ? (
+            <div className="cloud-error">{cloudError}</div>
+          ) : null}
           <p className="subtitle">
             Track shared travel expenses and settle up fast.
           </p>
@@ -738,6 +809,10 @@ export default function App() {
           Back to groups
         </button>
         <h1>{activeGroup.name}</h1>
+        <div className={`cloud-status ${cloudStatus}`}>{cloudLabel}</div>
+        {cloudStatus === "error" && cloudError ? (
+          <div className="cloud-error">{cloudError}</div>
+        ) : null}
       </header>
 
       <section className="card">
