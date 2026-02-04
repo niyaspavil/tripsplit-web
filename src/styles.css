@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&family=Fraunces:wght@600;700&display=swap");
 
 :root {
   font-family: "DM Sans", "Trebuchet MS", sans-serif;
@@ -11,10 +11,12 @@
   --surface: #ffffff;
   --surface-soft: #fef6e7;
   --accent: #1d1b16;
+  --accent-2: #2f5d50;
   --brand: #2f5d50;
-  --border: #ece4d7;
-  --shadow: 0 12px 30px rgba(33, 27, 22, 0.08);
-  --shadow-soft: 0 6px 16px rgba(33, 27, 22, 0.08);
+  --border: #eadfcd;
+  --shadow: 0 14px 34px rgba(33, 27, 22, 0.08);
+  --shadow-soft: 0 8px 18px rgba(33, 27, 22, 0.08);
+  --title-font: "Fraunces", "DM Sans", serif;
 }
 
 * {
@@ -37,11 +39,23 @@ body {
 body::before {
   content: "";
   position: fixed;
-  inset: -20% -10% auto auto;
+  inset: -15% -10% auto auto;
+  width: 360px;
+  height: 360px;
+  background: radial-gradient(circle, rgba(44, 111, 96, 0.24), transparent 70%);
+  filter: blur(12px);
+  pointer-events: none;
+  z-index: -1;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: auto auto -15% -10%;
   width: 320px;
   height: 320px;
-  background: radial-gradient(circle, rgba(44, 111, 96, 0.22), transparent 70%);
-  filter: blur(12px);
+  background: radial-gradient(circle, rgba(170, 126, 90, 0.2), transparent 70%);
+  filter: blur(10px);
   pointer-events: none;
   z-index: -1;
 }
@@ -66,15 +80,23 @@ body::before {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(12px);
 }
 
 h1 {
+  font-family: var(--title-font);
   font-size: 32px;
   margin: 0;
   letter-spacing: -0.02em;
 }
 
 h2 {
+  font-family: var(--title-font);
   font-size: 20px;
   margin: 0;
 }
@@ -97,7 +119,7 @@ h2 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: #1d1b16;
+  background: linear-gradient(150deg, #1d1b16, #2f5d50);
   color: #ffffff;
   box-shadow: var(--shadow-soft);
 }
@@ -121,7 +143,7 @@ h2 {
   gap: 6px;
   padding: 6px 12px;
   border-radius: 999px;
-  background: #f3efe8;
+  background: #f7f1e7;
   color: var(--muted);
   font-size: 12px;
   border: 1px solid var(--border);
@@ -181,7 +203,7 @@ h2 {
 .section-heading svg {
   width: 18px;
   height: 18px;
-  color: #2f5d50;
+  color: var(--accent-2);
 }
 
 section {
@@ -201,13 +223,14 @@ section {
 input {
   border: none;
   border-radius: 12px;
-  background: #f3efe8;
+  background: #ffffff;
   padding: 12px 14px;
   font-size: 16px;
   color: var(--ink);
   width: 100%;
   font-family: inherit;
   appearance: none;
+  border: 1px solid #efe4d4;
 }
 
 button {
@@ -216,7 +239,7 @@ button {
   padding: 10px 14px;
   font-size: 15px;
   cursor: pointer;
-  background: #f3efe8;
+  background: #f8f4ec;
   color: var(--ink);
   min-height: 40px;
   font-family: inherit;
@@ -231,11 +254,11 @@ button:hover {
 }
 
 .primary {
-  background: var(--accent);
+  background: linear-gradient(140deg, #1d1b16, #2f5d50);
   color: #ffffff;
   font-weight: 600;
   width: 100%;
-  box-shadow: 0 10px 20px rgba(29, 27, 22, 0.2);
+  box-shadow: 0 12px 22px rgba(29, 27, 22, 0.22);
 }
 
 .primary.disabled {
@@ -301,6 +324,7 @@ button:hover {
   padding: 6px 12px;
   font-size: 13px;
   border: 1px solid #e2dacd;
+  background: #faf6ef;
 }
 
 .pill.active {
@@ -320,7 +344,7 @@ button:hover {
 }
 
 .custom-card {
-  background: #f7f1e6;
+  background: #f7f2e8;
   border-radius: 12px;
   padding: 12px;
   display: flex;
@@ -422,14 +446,11 @@ button:active {
     position: sticky;
     top: 0;
     z-index: 10;
-    padding: 12px 0;
-    background: linear-gradient(
-      180deg,
-      rgba(245, 240, 233, 0.96) 0%,
-      rgba(245, 240, 233, 0.65) 70%,
-      rgba(245, 240, 233, 0) 100%
-    );
-    backdrop-filter: blur(8px);
+    padding: 12px 14px;
+    background: rgba(255, 255, 255, 0.82);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    backdrop-filter: blur(10px);
   }
 
   .row,
