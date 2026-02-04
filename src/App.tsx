@@ -1,11 +1,18 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut,
+  type User
+} from "firebase/auth";
+import {
   doc,
   onSnapshot,
   serverTimestamp,
   setDoc
 } from "firebase/firestore";
-import { db } from "./firebase";
+import { auth, db } from "./firebase";
 
 type Member = {
   id: string;
@@ -177,10 +184,20 @@ export default function App() {
     "connecting" | "syncing" | "ready" | "error"
   >("connecting");
   const [cloudError, setCloudError] = useState("");
+  const [authReady, setAuthReady] = useState(false);
+  const [authUser, setAuthUser] = useState<User | null>(null);
+  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
   const [view, setView] = useState<"groups" | "group" | "master">("groups");
   const [viewInitialized, setViewInitialized] = useState(false);
   const skipWriteRef = useRef(false);
-  const docRef = useMemo(() => doc(db, "tripsplit", "state"), []);
+  const docRef = useMemo(() => {
+    if (!authUser) return null;
+    return doc(db, "users", authUser.uid);
+  }, [authUser]);
 
   const [groupName, setGroupName] = useState("");
   const [memberName, setMemberName] = useState("");
@@ -199,7 +216,29 @@ export default function App() {
   }, [state.groups, state.activeGroupId]);
 
   useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setAuthUser(user);
+      setAuthReady(true);
+      setCloudError("");
+      setAuthError("");
+      setAuthBusy(false);
+      skipWriteRef.current = false;
+      if (!user) {
+        setHydrated(false);
+        setState(INITIAL_STATE);
+        setCloudStatus("connecting");
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!authReady || !authUser || !docRef) return;
     let initialized = false;
+    setCloudStatus("connecting");
+    setHydrated(false);
+
     const unsubscribe = onSnapshot(
       docRef,
       (snapshot) => {
@@ -234,10 +273,10 @@ export default function App() {
     );
 
     return () => unsubscribe();
-  }, [docRef]);
+  }, [authReady, authUser, docRef]);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || !docRef) return;
     if (skipWriteRef.current) {
       skipWriteRef.current = false;
       return;
@@ -612,14 +651,110 @@ export default function App() {
         ? "Offline"
         : "Syncing...";
 
+  const handleAuth = useCallback(async () => {
+    setAuthError("");
+    if (!authEmail.trim() || !authPassword.trim()) {
+      setAuthError("Enter an email and password.");
+      return;
+    }
+    setAuthBusy(true);
+    try {
+      if (authMode === "signup") {
+        await createUserWithEmailAndPassword(auth, authEmail, authPassword);
+      } else {
+        await signInWithEmailAndPassword(auth, authEmail, authPassword);
+      }
+      setAuthEmail("");
+      setAuthPassword("");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unable to authenticate.";
+      setAuthError(message);
+    } finally {
+      setAuthBusy(false);
+    }
+  }, [authEmail, authPassword, authMode]);
+
+  const handleSignOut = useCallback(async () => {
+    await signOut(auth);
+    setView("groups");
+    setViewInitialized(false);
+  }, []);
+
+  if (!authReady) {
+    return (
+      <div className="page">
+        <header className="page-header">
+          <h1>TripSplit</h1>
+          <p className="subtitle">Connecting to your account...</p>
+        </header>
+      </div>
+    );
+  }
+
+  if (!authUser) {
+    return (
+      <div className="page auth-page">
+        <header className="page-header">
+          <h1>TripSplit</h1>
+          <p className="subtitle">
+            Sign in to sync your trips across devices.
+          </p>
+        </header>
+        <section className="card auth-card">
+          <h2>{authMode === "signup" ? "Create account" : "Sign in"}</h2>
+          <input
+            type="email"
+            value={authEmail}
+            onChange={(event) => setAuthEmail(event.target.value)}
+            placeholder="Email address"
+            autoComplete="email"
+          />
+          <input
+            type="password"
+            value={authPassword}
+            onChange={(event) => setAuthPassword(event.target.value)}
+            placeholder="Password"
+            autoComplete={
+              authMode === "signup" ? "new-password" : "current-password"
+            }
+          />
+          {authError ? <div className="auth-error">{authError}</div> : null}
+          <button className="primary" onClick={handleAuth} disabled={authBusy}>
+            {authBusy
+              ? "Please wait..."
+              : authMode === "signup"
+                ? "Create account"
+                : "Sign in"}
+          </button>
+          <button
+            className="link auth-toggle"
+            onClick={() =>
+              setAuthMode((prev) => (prev === "signup" ? "signin" : "signup"))
+            }
+          >
+            {authMode === "signup"
+              ? "Already have an account? Sign in"
+              : "New here? Create an account"}
+          </button>
+        </section>
+      </div>
+    );
+  }
+
   if (view === "master") {
     return (
       <div className="page">
         <header className="page-header">
           <button className="link" onClick={() => setView("groups")}
             >Back to groups</button>
+          <div className="header-actions">
+            <div className={`cloud-status ${cloudStatus}`}>{cloudLabel}</div>
+            <button className="link" onClick={handleSignOut}>
+              Sign out
+            </button>
+          </div>
           <h1>Master Dashboard</h1>
-          <div className={`cloud-status ${cloudStatus}`}>{cloudLabel}</div>
           {cloudStatus === "error" && cloudError ? (
             <div className="cloud-error">{cloudError}</div>
           ) : null}
@@ -730,7 +865,12 @@ export default function App() {
       <div className="page">
         <header className="page-header">
           <h1>TripSplit</h1>
-          <div className={`cloud-status ${cloudStatus}`}>{cloudLabel}</div>
+          <div className="header-actions">
+            <div className={`cloud-status ${cloudStatus}`}>{cloudLabel}</div>
+            <button className="link" onClick={handleSignOut}>
+              Sign out
+            </button>
+          </div>
           {cloudStatus === "error" && cloudError ? (
             <div className="cloud-error">{cloudError}</div>
           ) : null}
@@ -809,7 +949,12 @@ export default function App() {
           Back to groups
         </button>
         <h1>{activeGroup.name}</h1>
-        <div className={`cloud-status ${cloudStatus}`}>{cloudLabel}</div>
+        <div className="header-actions">
+          <div className={`cloud-status ${cloudStatus}`}>{cloudLabel}</div>
+          <button className="link" onClick={handleSignOut}>
+            Sign out
+          </button>
+        </div>
         {cloudStatus === "error" && cloudError ? (
           <div className="cloud-error">{cloudError}</div>
         ) : null}

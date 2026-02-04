@@ -71,6 +71,13 @@ h2 {
   margin: 0;
 }
 
+.header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
 .cloud-status {
   align-self: flex-start;
   display: inline-flex;
@@ -107,6 +114,25 @@ h2 {
   color: #b04632;
   font-size: 12px;
   margin-top: 6px;
+}
+
+.auth-page {
+  min-height: 100dvh;
+  justify-content: center;
+}
+
+.auth-card {
+  max-width: 420px;
+}
+
+.auth-error {
+  color: #b04632;
+  font-size: 12px;
+}
+
+.auth-toggle {
+  margin-top: 6px;
+  text-align: left;
 }
 
 section {
