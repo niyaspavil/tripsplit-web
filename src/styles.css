@@ -31,7 +31,7 @@ body {
   min-height: 100dvh;
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
-  background: radial-gradient(circle at top, #ffffff 0%, #f5f0e9 35%, #efe5d6 100%);
+  background: linear-gradient(150deg, #fff1e2 0%, #e5f5f1 45%, #f6f0e3 100%);
 }
 
 body::before {
@@ -40,7 +40,7 @@ body::before {
   inset: -20% -10% auto auto;
   width: 320px;
   height: 320px;
-  background: radial-gradient(circle, rgba(47, 93, 80, 0.18), transparent 70%);
+  background: radial-gradient(circle, rgba(44, 111, 96, 0.22), transparent 70%);
   filter: blur(12px);
   pointer-events: none;
   z-index: -1;
