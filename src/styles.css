@@ -312,9 +312,9 @@ h2 {
   color: #ffffff;
 }
 
-.group-section-nav {
+.group-section-nav,
+.groups-home-nav {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
   padding: 8px;
   border: 1px solid var(--border);
@@ -327,7 +327,16 @@ h2 {
   z-index: 15;
 }
 
-.group-section-nav button {
+.group-section-nav {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.groups-home-nav {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.group-section-nav button,
+.groups-home-nav button {
   border: 1px solid transparent;
   border-radius: var(--radius-control);
   background: transparent;
@@ -342,12 +351,14 @@ h2 {
   color: var(--muted);
 }
 
-.group-section-nav button svg {
+.group-section-nav button svg,
+.groups-home-nav button svg {
   width: 18px;
   height: 18px;
 }
 
-.group-section-nav button.active {
+.group-section-nav button.active,
+.groups-home-nav button.active {
   border-color: var(--border);
   color: var(--ink);
   background: var(--surface-soft);
@@ -807,7 +818,8 @@ button:active {
     padding: 7px 8px;
   }
 
-  .group-section-nav {
+  .group-section-nav,
+  .groups-home-nav {
     display: flex;
     overflow-x: auto;
     gap: 6px;
@@ -816,11 +828,13 @@ button:active {
     scrollbar-width: none;
   }
 
-  .group-section-nav::-webkit-scrollbar {
+  .group-section-nav::-webkit-scrollbar,
+  .groups-home-nav::-webkit-scrollbar {
     display: none;
   }
 
-  .group-section-nav button {
+  .group-section-nav button,
+  .groups-home-nav button {
     min-width: 82px;
     min-height: 48px;
     padding: 6px 8px;
@@ -909,6 +923,7 @@ button:active {
   .no-print,
   .bottom-nav,
   .group-section-nav,
+  .groups-home-nav,
   button,
   .link,
   input,

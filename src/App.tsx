@@ -78,6 +78,7 @@ type MasterExpense = Expense & {
 
 type ThemePreset = "postcard" | "metro" | "sunset";
 type GroupSection = "overview" | "members" | "add-expense" | "expenses" | "settings";
+type GroupsHomeSection = "my-groups" | "create" | "join" | "dashboard";
 
 const createId = () =>
   `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -523,6 +524,7 @@ export default function App() {
   const [authResetMessage, setAuthResetMessage] = useState("");
   const [view, setView] = useState<"groups" | "group" | "master">("groups");
   const [groupSection, setGroupSection] = useState<GroupSection>("overview");
+  const [groupsHomeSection, setGroupsHomeSection] = useState<GroupsHomeSection>("my-groups");
   const [viewInitialized, setViewInitialized] = useState(false);
   const [groupsLoaded, setGroupsLoaded] = useState(false);
   const [joinCode, setJoinCode] = useState("");
@@ -1230,6 +1232,7 @@ export default function App() {
     await signOut(auth);
     setView("groups");
     setGroupSection("overview");
+    setGroupsHomeSection("my-groups");
     setViewInitialized(false);
   }, []);
 
@@ -1248,6 +1251,7 @@ export default function App() {
     resetExpenseForm();
     setView("groups");
     setGroupSection("overview");
+    setGroupsHomeSection("my-groups");
   }, [activeGroup, resetExpenseForm]);
 
   const handleCopyInvite = useCallback(async () => {
@@ -1367,6 +1371,7 @@ export default function App() {
           onClick={() => {
             setView("groups");
             setGroupSection("overview");
+            setGroupsHomeSection("my-groups");
             setState((prev) => ({ ...prev, activeGroupId: null }));
           }}
         >
@@ -1389,6 +1394,7 @@ export default function App() {
             } else {
               setView("groups");
               setGroupSection("overview");
+              setGroupsHomeSection("create");
             }
           }}
         >
@@ -1511,6 +1517,7 @@ export default function App() {
             onClick={() => {
               setView("groups");
               setGroupSection("overview");
+              setGroupsHomeSection("my-groups");
             }}
           >
             Back to groups
@@ -1706,93 +1713,171 @@ export default function App() {
           </p>
         </header>
 
-        <section className="card">
-          <div className="section-heading">
-            <Icon name="users" />
-            <h2>Create a group</h2>
-          </div>
-          <input
-            value={groupName}
-            onChange={(event) => setGroupName(event.target.value)}
-            placeholder="e.g. Tokyo 2026"
-          />
-          <div className="select-row">
-            <select
-              value={groupCurrencyDraft}
-              onChange={(event) => setGroupCurrencyDraft(event.target.value)}
-            >
-              {currencyOptions.map((option) => (
-                <option key={option.code} value={option.code}>
-                  {option.code} · {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <button className="primary" onClick={addGroup}>
-            Add group
-          </button>
-        </section>
-
-        <section className="card">
-          <div className="section-heading">
-            <Icon name="share" />
-            <h2>Join with code</h2>
-          </div>
-          <input
-            value={joinCode}
-            onChange={(event) => setJoinCode(event.target.value)}
-            placeholder="Enter invite code"
-          />
-          {joinError ? <div className="auth-error">{joinError}</div> : null}
-          <button className="primary" onClick={joinGroupByCode}>
-            Join group
-          </button>
-        </section>
-
-        <section className="card">
-          <div className="section-heading">
-            <Icon name="chart" />
-            <h2>Master dashboard</h2>
-          </div>
-          <p className="muted">
-            See totals across all groups and manage every expense.
-          </p>
-          <button className="primary" onClick={() => setView("master")}>
-            Open dashboard
-          </button>
-        </section>
-
-        <section>
-          <div className="section-heading">
+        <nav className="groups-home-nav no-print" aria-label="Groups home sections">
+          <button
+            className={groupsHomeSection === "my-groups" ? "active" : ""}
+            onClick={() => setGroupsHomeSection("my-groups")}
+          >
             <Icon name="list" />
-            <h2>Your groups</h2>
-          </div>
-          {state.groups.length === 0 ? (
-            <p className="muted">No groups yet.</p>
-          ) : (
-            state.groups.map((group) => (
-              <button
-                className="row button-row"
-                key={group.id}
-                onClick={() => {
-                  setState((prev) => ({
-                    ...prev,
-                    activeGroupId: group.id
-                  }));
-                  setView("group");
-                  setGroupSection("overview");
-                }}
-              >
-                <div>
-                  <div className="row-title">{group.name}</div>
-                  <div className="row-meta">
-                    {group.members.length} people · {group.expenses.length} expenses
-                  </div>
+            <span>My Groups</span>
+          </button>
+          <button
+            className={groupsHomeSection === "create" ? "active" : ""}
+            onClick={() => setGroupsHomeSection("create")}
+          >
+            <Icon name="users" />
+            <span>Create</span>
+          </button>
+          <button
+            className={groupsHomeSection === "join" ? "active" : ""}
+            onClick={() => setGroupsHomeSection("join")}
+          >
+            <Icon name="share" />
+            <span>Join</span>
+          </button>
+          <button
+            className={groupsHomeSection === "dashboard" ? "active" : ""}
+            onClick={() => setGroupsHomeSection("dashboard")}
+          >
+            <Icon name="chart" />
+            <span>Dashboard</span>
+          </button>
+        </nav>
+
+        {groupsHomeSection === "my-groups" ? (
+          <section>
+            <div className="section-heading">
+              <Icon name="list" />
+              <h2>Your groups</h2>
+            </div>
+            {state.groups.length === 0 ? (
+              <div className="card">
+                <p className="muted">No groups yet.</p>
+                <div className="select-row">
+                  <button className="pill" onClick={() => setGroupsHomeSection("create")}>
+                    <Icon name="plus" /> Create group
+                  </button>
+                  <button className="pill" onClick={() => setGroupsHomeSection("join")}>
+                    <Icon name="share" /> Join with code
+                  </button>
                 </div>
+              </div>
+            ) : (
+              state.groups.map((group) => (
+                <button
+                  className="row button-row"
+                  key={group.id}
+                  onClick={() => {
+                    setState((prev) => ({
+                      ...prev,
+                      activeGroupId: group.id
+                    }));
+                    setView("group");
+                    setGroupSection("overview");
+                  }}
+                >
+                  <div>
+                    <div className="row-title">{group.name}</div>
+                    <div className="row-meta">
+                      {group.members.length} people · {group.expenses.length} expenses
+                    </div>
+                  </div>
+                </button>
+              ))
+            )}
+          </section>
+        ) : null}
+
+        {groupsHomeSection === "create" ? (
+          <section className="card">
+            <div className="section-heading">
+              <Icon name="users" />
+              <h2>Create a group</h2>
+            </div>
+            <input
+              value={groupName}
+              onChange={(event) => setGroupName(event.target.value)}
+              placeholder="e.g. Tokyo 2026"
+            />
+            <div className="select-row">
+              <select
+                value={groupCurrencyDraft}
+                onChange={(event) => setGroupCurrencyDraft(event.target.value)}
+              >
+                {currencyOptions.map((option) => (
+                  <option key={option.code} value={option.code}>
+                    {option.code} · {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button className="primary" onClick={addGroup}>
+              Add group
+            </button>
+          </section>
+        ) : null}
+
+        {groupsHomeSection === "join" ? (
+          <section className="card">
+            <div className="section-heading">
+              <Icon name="share" />
+              <h2>Join with code</h2>
+            </div>
+            <input
+              value={joinCode}
+              onChange={(event) => setJoinCode(event.target.value)}
+              placeholder="Enter invite code"
+            />
+            {joinError ? <div className="auth-error">{joinError}</div> : null}
+            <button className="primary" onClick={joinGroupByCode}>
+              Join group
+            </button>
+          </section>
+        ) : null}
+
+        {groupsHomeSection === "dashboard" ? (
+          <>
+            <section className="card">
+              <div className="section-heading">
+                <Icon name="wallet" />
+                <h2>Workspace overview</h2>
+              </div>
+              <div className="stat-row">
+                <span>Total spent</span>
+                <strong>
+                  {totalSpent === null
+                    ? "Mixed currencies"
+                    : formatCurrencyValue(totalSpent, singleCurrency)}
+                </strong>
+              </div>
+              <div className="stat-row">
+                <span>Groups</span>
+                <strong>{totalGroups}</strong>
+              </div>
+              <div className="stat-row">
+                <span>Expenses</span>
+                <strong>{totalExpenses}</strong>
+              </div>
+              <div className="stat-row">
+                <span>Members</span>
+                <strong>{totalMembers}</strong>
+              </div>
+            </section>
+
+            <section className="card">
+              <div className="section-heading">
+                <Icon name="chart" />
+                <h2>Master dashboard</h2>
+              </div>
+              <p className="muted">
+                See totals across all groups and manage every expense.
+              </p>
+              <button className="primary" onClick={() => setView("master")}>
+                Open dashboard
               </button>
-            ))
-          )}
-        </section>
+            </section>
+          </>
+        ) : null}
         {renderBottomNav()}
       </div>
     );
@@ -1811,6 +1896,7 @@ export default function App() {
             }));
             setView("groups");
             setGroupSection("overview");
+            setGroupsHomeSection("my-groups");
             resetExpenseForm();
           }}
         >
