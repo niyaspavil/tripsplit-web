@@ -283,6 +283,15 @@ const parseAmount = (value: string) => {
   return Number.isNaN(parsed) ? 0 : parsed;
 };
 
+const hasErrorCode = (error: unknown, code: string) => {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: string }).code === code
+  );
+};
+
 const formatMoney = (value: number) => {
   const rounded = roundToCents(value);
   return rounded.toFixed(2);
@@ -586,6 +595,8 @@ export default function App() {
     };
 
     migrateLegacyState().catch((error) => {
+      // Legacy user-doc migration is optional. Ignore missing rules on /users.
+      if (hasErrorCode(error, "permission-denied")) return;
       setCloudStatus("error");
       setCloudError(error?.message || "Migration failed.");
     });
