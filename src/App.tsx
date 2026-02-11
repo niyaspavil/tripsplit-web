@@ -1745,15 +1745,25 @@ export default function App() {
         </nav>
 
         {groupsHomeSection === "my-groups" ? (
-          <section>
-            <div className="section-heading">
-              <Icon name="list" />
-              <h2>Your groups</h2>
+          <section className="tab-section">
+            <div className="panel-head">
+              <p className="panel-kicker">Workspace</p>
+              <div className="section-heading">
+                <Icon name="list" />
+                <h2>Your groups</h2>
+              </div>
+              <p className="panel-subtitle">Open a trip to manage members, expenses, and settlements.</p>
             </div>
             {state.groups.length === 0 ? (
-              <div className="card">
-                <p className="muted">No groups yet.</p>
-                <div className="select-row">
+              <div className="card empty-state">
+                <span className="empty-state-icon">
+                  <Icon name="spark" />
+                </span>
+                <h3 className="empty-state-title">No trips yet</h3>
+                <p className="empty-state-text">
+                  Start by creating a new group or joining one with an invite code.
+                </p>
+                <div className="select-row empty-state-actions">
                   <button className="pill" onClick={() => setGroupsHomeSection("create")}>
                     <Icon name="plus" /> Create group
                   </button>
@@ -1789,10 +1799,14 @@ export default function App() {
         ) : null}
 
         {groupsHomeSection === "create" ? (
-          <section className="card">
-            <div className="section-heading">
-              <Icon name="users" />
-              <h2>Create a group</h2>
+          <section className="card tab-section">
+            <div className="panel-head panel-head-tight">
+              <p className="panel-kicker">New Trip</p>
+              <div className="section-heading">
+                <Icon name="users" />
+                <h2>Create a group</h2>
+              </div>
+              <p className="panel-subtitle">Choose a name and base currency to get started.</p>
             </div>
             <input
               value={groupName}
@@ -1818,10 +1832,14 @@ export default function App() {
         ) : null}
 
         {groupsHomeSection === "join" ? (
-          <section className="card">
-            <div className="section-heading">
-              <Icon name="share" />
-              <h2>Join with code</h2>
+          <section className="card tab-section">
+            <div className="panel-head panel-head-tight">
+              <p className="panel-kicker">Collaborate</p>
+              <div className="section-heading">
+                <Icon name="share" />
+                <h2>Join with code</h2>
+              </div>
+              <p className="panel-subtitle">Paste an invite code from a teammate to join their group.</p>
             </div>
             <input
               value={joinCode}
@@ -1836,47 +1854,73 @@ export default function App() {
         ) : null}
 
         {groupsHomeSection === "dashboard" ? (
-          <>
-            <section className="card">
-              <div className="section-heading">
-                <Icon name="wallet" />
-                <h2>Workspace overview</h2>
-              </div>
-              <div className="stat-row">
-                <span>Total spent</span>
-                <strong>
-                  {totalSpent === null
-                    ? "Mixed currencies"
-                    : formatCurrencyValue(totalSpent, singleCurrency)}
-                </strong>
-              </div>
-              <div className="stat-row">
-                <span>Groups</span>
-                <strong>{totalGroups}</strong>
-              </div>
-              <div className="stat-row">
-                <span>Expenses</span>
-                <strong>{totalExpenses}</strong>
-              </div>
-              <div className="stat-row">
-                <span>Members</span>
-                <strong>{totalMembers}</strong>
-              </div>
-            </section>
-
-            <section className="card">
-              <div className="section-heading">
+          state.groups.length === 0 ? (
+            <section className="card empty-state">
+              <span className="empty-state-icon">
                 <Icon name="chart" />
-                <h2>Master dashboard</h2>
-              </div>
-              <p className="muted">
-                See totals across all groups and manage every expense.
+              </span>
+              <h3 className="empty-state-title">Dashboard will appear here</h3>
+              <p className="empty-state-text">
+                Add or join at least one group to unlock spending insights.
               </p>
-              <button className="primary" onClick={() => setView("master")}>
-                Open dashboard
-              </button>
+              <div className="select-row empty-state-actions">
+                <button className="pill" onClick={() => setGroupsHomeSection("create")}>
+                  <Icon name="plus" /> Create group
+                </button>
+                <button className="pill" onClick={() => setGroupsHomeSection("join")}>
+                  <Icon name="share" /> Join group
+                </button>
+              </div>
             </section>
-          </>
+          ) : (
+            <>
+              <section className="card tab-section">
+                <div className="panel-head panel-head-tight">
+                  <p className="panel-kicker">Snapshot</p>
+                  <div className="section-heading">
+                    <Icon name="wallet" />
+                    <h2>Workspace overview</h2>
+                  </div>
+                </div>
+                <div className="stat-row">
+                  <span>Total spent</span>
+                  <strong>
+                    {totalSpent === null
+                      ? "Mixed currencies"
+                      : formatCurrencyValue(totalSpent, singleCurrency)}
+                  </strong>
+                </div>
+                <div className="stat-row">
+                  <span>Groups</span>
+                  <strong>{totalGroups}</strong>
+                </div>
+                <div className="stat-row">
+                  <span>Expenses</span>
+                  <strong>{totalExpenses}</strong>
+                </div>
+                <div className="stat-row">
+                  <span>Members</span>
+                  <strong>{totalMembers}</strong>
+                </div>
+              </section>
+
+              <section className="card tab-section">
+                <div className="panel-head panel-head-tight">
+                  <p className="panel-kicker">Advanced</p>
+                  <div className="section-heading">
+                    <Icon name="chart" />
+                    <h2>Master dashboard</h2>
+                  </div>
+                </div>
+                <p className="muted">
+                  See totals across all groups and manage every expense.
+                </p>
+                <button className="primary" onClick={() => setView("master")}>
+                  Open dashboard
+                </button>
+              </section>
+            </>
+          )
         ) : null}
         {renderBottomNav()}
       </div>
@@ -1962,10 +2006,13 @@ export default function App() {
 
       {groupSection === "overview" ? (
         <>
-          <section className="card">
-            <div className="section-heading">
-              <Icon name="wallet" />
-              <h2>Trip summary</h2>
+          <section className="card tab-section">
+            <div className="panel-head panel-head-tight">
+              <p className="panel-kicker">Summary</p>
+              <div className="section-heading">
+                <Icon name="wallet" />
+                <h2>Trip summary</h2>
+              </div>
             </div>
             <div className="stat-row">
               <span>Total spent</span>
@@ -1986,13 +2033,25 @@ export default function App() {
             </div>
           </section>
 
-          <section>
-            <div className="section-heading">
-              <Icon name="balance" />
-              <h2>Balances</h2>
+          <section className="tab-section">
+            <div className="panel-head">
+              <p className="panel-kicker">Balances</p>
+              <div className="section-heading">
+                <Icon name="balance" />
+                <h2>Who is up or down</h2>
+              </div>
             </div>
             {balances.length === 0 ? (
-              <p className="muted">Add members to start splitting.</p>
+              <div className="card empty-state">
+                <span className="empty-state-icon">
+                  <Icon name="users" />
+                </span>
+                <h3 className="empty-state-title">No balance data yet</h3>
+                <p className="empty-state-text">Add members first, then log expenses to compute balances.</p>
+                <button className="pill" onClick={() => setGroupSection("members")}>
+                  <Icon name="users" /> Add members
+                </button>
+              </div>
             ) : (
               balances.map(({ member, balance }) => (
                 <div className="row" key={member.id}>
@@ -2006,13 +2065,22 @@ export default function App() {
             )}
           </section>
 
-          <section>
-            <div className="section-heading">
-              <Icon name="wallet" />
-              <h2>Settle up</h2>
+          <section className="tab-section">
+            <div className="panel-head">
+              <p className="panel-kicker">Settlement Plan</p>
+              <div className="section-heading">
+                <Icon name="wallet" />
+                <h2>Settle up</h2>
+              </div>
             </div>
             {settlements.length === 0 ? (
-              <p className="muted">Everyone is even or no expenses yet.</p>
+              <div className="card empty-state">
+                <span className="empty-state-icon">
+                  <Icon name="balance" />
+                </span>
+                <h3 className="empty-state-title">Nothing to settle</h3>
+                <p className="empty-state-text">Everyone is balanced right now, or there are no expenses yet.</p>
+              </div>
             ) : (
               settlements.map((settlement, index) => (
                 <div className="row highlight" key={`${settlement.from.id}-${index}`}>
@@ -2029,10 +2097,14 @@ export default function App() {
 
       {groupSection === "members" ? (
         <>
-          <section className="card">
-            <div className="section-heading">
-              <Icon name="users" />
-              <h2>Add members</h2>
+          <section className="card tab-section">
+            <div className="panel-head panel-head-tight">
+              <p className="panel-kicker">People</p>
+              <div className="section-heading">
+                <Icon name="users" />
+                <h2>Add members</h2>
+              </div>
+              <p className="panel-subtitle">Invite everyone who shares costs in this trip.</p>
             </div>
             <input
               value={memberName}
@@ -2044,13 +2116,22 @@ export default function App() {
             </button>
           </section>
 
-          <section>
-            <div className="section-heading">
-              <Icon name="list" />
-              <h2>Member totals</h2>
+          <section className="tab-section">
+            <div className="panel-head">
+              <p className="panel-kicker">Contributions</p>
+              <div className="section-heading">
+                <Icon name="list" />
+                <h2>Member totals</h2>
+              </div>
             </div>
             {activeGroup.members.length === 0 ? (
-              <p className="muted">No members yet.</p>
+              <div className="card empty-state">
+                <span className="empty-state-icon">
+                  <Icon name="users" />
+                </span>
+                <h3 className="empty-state-title">No members yet</h3>
+                <p className="empty-state-text">Add at least one member to track who paid what.</p>
+              </div>
             ) : (
               activeGroup.members.map((member) => (
                 <div className="row" key={member.id}>
@@ -2064,14 +2145,22 @@ export default function App() {
       ) : null}
 
       {groupSection === "add-expense" ? (
-        <section>
-          <div className="section-heading">
-            <Icon name="receipt" />
-            <h2>{editingExpenseId ? "Edit expense" : "New expense"}</h2>
+        <section className="tab-section">
+          <div className="panel-head">
+            <p className="panel-kicker">{editingExpenseId ? "Update" : "Capture"}</p>
+            <div className="section-heading">
+              <Icon name="receipt" />
+              <h2>{editingExpenseId ? "Edit expense" : "New expense"}</h2>
+            </div>
+            <p className="panel-subtitle">Log one shared cost and split it instantly.</p>
           </div>
           {activeGroup.members.length === 0 ? (
-            <div className="card">
-              <p className="muted">Add members before logging expenses.</p>
+            <div className="card empty-state">
+              <span className="empty-state-icon">
+                <Icon name="users" />
+              </span>
+              <h3 className="empty-state-title">Members required</h3>
+              <p className="empty-state-text">Add members before logging expenses for this trip.</p>
               <button className="pill" onClick={() => setGroupSection("members")}>
                 <Icon name="users" /> Add members
               </button>
@@ -2285,10 +2374,13 @@ export default function App() {
       ) : null}
 
       {groupSection === "expenses" ? (
-        <section>
-          <div className="section-heading">
-            <Icon name="list" />
-            <h2>Expenses</h2>
+        <section className="tab-section">
+          <div className="panel-head">
+            <p className="panel-kicker">History</p>
+            <div className="section-heading">
+              <Icon name="list" />
+              <h2>Expenses</h2>
+            </div>
           </div>
           <div className="select-row">
             <button
@@ -2302,7 +2394,13 @@ export default function App() {
             </button>
           </div>
           {activeGroup.expenses.length === 0 ? (
-            <p className="muted">No expenses yet.</p>
+            <div className="card empty-state">
+              <span className="empty-state-icon">
+                <Icon name="receipt" />
+              </span>
+              <h3 className="empty-state-title">No expenses yet</h3>
+              <p className="empty-state-text">Tap New expense to log your first shared cost.</p>
+            </div>
           ) : (
             activeGroup.expenses.map((expense) => (
               <div className="row card" key={expense.id}>
@@ -2353,10 +2451,14 @@ export default function App() {
       ) : null}
 
       {groupSection === "settings" ? (
-        <section className="card">
-          <div className="section-heading">
-            <Icon name="settings" />
-            <h2>Group settings</h2>
+        <section className="card tab-section">
+          <div className="panel-head panel-head-tight">
+            <p className="panel-kicker">Configuration</p>
+            <div className="section-heading">
+              <Icon name="settings" />
+              <h2>Group settings</h2>
+            </div>
+            <p className="panel-subtitle">Manage currency, invite code, and exports for this group.</p>
           </div>
           <div className="field">
             <span>Base currency</span>

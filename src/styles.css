@@ -351,6 +351,11 @@ h2 {
   color: var(--muted);
 }
 
+.group-section-nav button span,
+.groups-home-nav button span {
+  letter-spacing: 0.01em;
+}
+
 .group-section-nav button svg,
 .groups-home-nav button svg {
   width: 18px;
@@ -362,6 +367,74 @@ h2 {
   border-color: var(--border);
   color: var(--ink);
   background: var(--surface-soft);
+}
+
+.tab-section {
+  gap: 14px;
+}
+
+.panel-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.panel-head-tight {
+  margin-bottom: 2px;
+}
+
+.panel-kicker {
+  margin: 0;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.panel-subtitle {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.empty-state {
+  align-items: flex-start;
+  gap: 10px;
+  border-style: dashed;
+}
+
+.empty-state-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-soft);
+  color: var(--accent-2);
+}
+
+.empty-state-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.empty-state-title {
+  margin: 0;
+  font-family: var(--title-font);
+  font-size: 19px;
+  line-height: 1.2;
+}
+
+.empty-state-text {
+  margin: 0;
+  color: var(--muted);
+  max-width: 44ch;
+}
+
+.empty-state-actions {
+  margin-top: 4px;
 }
 
 .cloud-status {
@@ -884,6 +957,14 @@ button:active {
 
   .section-heading {
     gap: 8px;
+  }
+
+  .panel-subtitle {
+    font-size: 12px;
+  }
+
+  .empty-state-title {
+    font-size: 17px;
   }
 
   .bottom-nav {
