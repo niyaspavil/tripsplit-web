@@ -2,15 +2,25 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut,
   type User
 } from "firebase/auth";
 import {
+  addDoc,
+  arrayUnion,
+  collection,
+  deleteDoc,
   doc,
+  getDoc,
+  getDocs,
   onSnapshot,
+  query,
   serverTimestamp,
-  setDoc
+  setDoc,
+  updateDoc,
+  where
 } from "firebase/firestore";
 import { auth, db } from "./firebase";
 
@@ -23,6 +33,9 @@ type Expense = {
   id: string;
   title: string;
   amount: number;
+  currency?: string;
+  originalAmount?: number;
+  fxRate?: number;
   paidBy: string;
   splitBetween: string[];
   splitMode?: "equal" | "custom";
@@ -33,6 +46,10 @@ type Expense = {
 type Group = {
   id: string;
   name: string;
+  currency: string;
+  inviteCode: string;
+  ownerId: string;
+  collaborators: string[];
   members: Member[];
   expenses: Expense[];
 };
@@ -56,10 +73,30 @@ type Settlement = {
 type MasterExpense = Expense & {
   groupId: string;
   groupName: string;
+  groupCurrency: string;
 };
 
 const createId = () =>
   `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+const createInviteCode = () =>
+  Math.random().toString(36).slice(2, 8).toUpperCase();
+
+const currencyOptions = [
+  { code: "USD", label: "US Dollar", symbol: "$" },
+  { code: "EUR", label: "Euro", symbol: "€" },
+  { code: "GBP", label: "British Pound", symbol: "£" },
+  { code: "INR", label: "Indian Rupee", symbol: "₹" },
+  { code: "AED", label: "UAE Dirham", symbol: "د.إ" },
+  { code: "SGD", label: "Singapore Dollar", symbol: "$" },
+  { code: "JPY", label: "Japanese Yen", symbol: "¥" },
+  { code: "AUD", label: "Australian Dollar", symbol: "$" },
+  { code: "CAD", label: "Canadian Dollar", symbol: "$" }
+];
+
+const getCurrencySymbol = (code: string) => {
+  return currencyOptions.find((option) => option.code === code)?.symbol || "$";
+};
 
 const Icon = ({
   name,
@@ -75,7 +112,13 @@ const Icon = ({
     | "list"
     | "key"
     | "shield"
-    | "chart";
+    | "chart"
+    | "share"
+    | "settings"
+    | "home"
+    | "plus"
+    | "download"
+    | "printer";
   className?: string;
 }) => {
   const shared = {
@@ -173,6 +216,60 @@ const Icon = ({
           <path d="M17 15v-2" />
         </svg>
       );
+    case "share":
+      return (
+        <svg {...shared}>
+          <circle cx="6" cy="12" r="2.5" />
+          <circle cx="18" cy="6" r="2.5" />
+          <circle cx="18" cy="18" r="2.5" />
+          <path d="M8.2 11L15.8 7" />
+          <path d="M8.2 13L15.8 17" />
+        </svg>
+      );
+    case "settings":
+      return (
+        <svg {...shared}>
+          <circle cx="12" cy="12" r="3.2" />
+          <path d="M4 12h2" />
+          <path d="M18 12h2" />
+          <path d="M12 4v2" />
+          <path d="M12 18v2" />
+          <path d="M6.5 6.5l1.5 1.5" />
+          <path d="M16 16l1.5 1.5" />
+          <path d="M6.5 17.5l1.5-1.5" />
+          <path d="M16 8l1.5-1.5" />
+        </svg>
+      );
+    case "home":
+      return (
+        <svg {...shared}>
+          <path d="M4 11l8-6 8 6" />
+          <path d="M6 10v9h12v-9" />
+        </svg>
+      );
+    case "plus":
+      return (
+        <svg {...shared}>
+          <path d="M12 5v14" />
+          <path d="M5 12h14" />
+        </svg>
+      );
+    case "download":
+      return (
+        <svg {...shared}>
+          <path d="M12 3v12" />
+          <path d="M7 10l5 5 5-5" />
+          <path d="M5 20h14" />
+        </svg>
+      );
+    case "printer":
+      return (
+        <svg {...shared}>
+          <path d="M7 8V4h10v4" />
+          <path d="M7 16h10v4H7z" />
+          <rect x="4" y="8" width="16" height="8" rx="2" />
+        </svg>
+      );
     default:
       return null;
   }
@@ -189,6 +286,38 @@ const parseAmount = (value: string) => {
 const formatMoney = (value: number) => {
   const rounded = roundToCents(value);
   return rounded.toFixed(2);
+};
+
+const formatCurrencyValue = (value: number, currency: string) => {
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency
+    }).format(value);
+  } catch {
+    return `${getCurrencySymbol(currency)}${formatMoney(value)}`;
+  }
+};
+
+const escapeCsvValue = (value: string | number) => {
+  const raw = String(value ?? "");
+  return `"${raw.replace(/"/g, "\"\"")}"`;
+};
+
+const buildCsv = (rows: (string | number)[][]) =>
+  rows.map((row) => row.map(escapeCsvValue).join(",")).join("\n");
+
+const downloadCsv = (filename: string, rows: (string | number)[][]) => {
+  const csv = buildCsv(rows);
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 };
 
 const buildEqualCustomAmounts = (memberIds: string[], total: number) => {
@@ -308,18 +437,22 @@ export default function App() {
   const [authPassword, setAuthPassword] = useState("");
   const [authError, setAuthError] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
+  const [authResetMessage, setAuthResetMessage] = useState("");
   const [view, setView] = useState<"groups" | "group" | "master">("groups");
   const [viewInitialized, setViewInitialized] = useState(false);
-  const skipWriteRef = useRef(false);
-  const docRef = useMemo(() => {
-    if (!authUser) return null;
-    return doc(db, "users", authUser.uid);
-  }, [authUser]);
+  const [groupsLoaded, setGroupsLoaded] = useState(false);
+  const [joinCode, setJoinCode] = useState("");
+  const [joinError, setJoinError] = useState("");
+  const [copyMessage, setCopyMessage] = useState("");
+  const hasMigratedRef = useRef(false);
 
   const [groupName, setGroupName] = useState("");
+  const [groupCurrencyDraft, setGroupCurrencyDraft] = useState("USD");
   const [memberName, setMemberName] = useState("");
   const [expenseTitle, setExpenseTitle] = useState("");
   const [expenseAmount, setExpenseAmount] = useState("");
+  const [expenseCurrency, setExpenseCurrency] = useState("USD");
+  const [expenseFxRate, setExpenseFxRate] = useState("1");
   const [paidBy, setPaidBy] = useState("");
   const [splitBetween, setSplitBetween] = useState<string[]>([]);
   const [splitMode, setSplitMode] = useState<"equal" | "custom">("equal");
@@ -332,6 +465,8 @@ export default function App() {
     return state.groups.find((group) => group.id === state.activeGroupId) || null;
   }, [state.groups, state.activeGroupId]);
 
+  const baseCurrency = activeGroup?.currency || "USD";
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setAuthUser(user);
@@ -339,11 +474,13 @@ export default function App() {
       setCloudError("");
       setAuthError("");
       setAuthBusy(false);
-      skipWriteRef.current = false;
+      setAuthResetMessage("");
       if (!user) {
         setHydrated(false);
         setState(INITIAL_STATE);
         setCloudStatus("connecting");
+        setGroupsLoaded(false);
+        hasMigratedRef.current = false;
       }
     });
 
@@ -351,68 +488,104 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!authReady || !authUser || !docRef) return;
-    let initialized = false;
+    if (!authReady || !authUser || hasMigratedRef.current) return;
+    hasMigratedRef.current = true;
+    const migrateLegacyState = async () => {
+      const legacyRef = doc(db, "users", authUser.uid);
+      const legacySnap = await getDoc(legacyRef);
+      if (!legacySnap.exists()) return;
+      const legacyData = legacySnap.data() as {
+        migratedToGroups?: boolean;
+        state?: AppState;
+      };
+      if (!legacyData?.state || legacyData.migratedToGroups) return;
+
+      const groupsToCreate = legacyData.state.groups || [];
+      for (const group of groupsToCreate) {
+        await setDoc(doc(db, "groups", group.id || createId()), {
+          name: group.name,
+          members: group.members || [],
+          expenses: group.expenses || [],
+          currency: group.currency || "USD",
+          inviteCode: createInviteCode(),
+          ownerId: authUser.uid,
+          collaborators: [authUser.uid],
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+      }
+
+      await setDoc(
+        legacyRef,
+        {
+          migratedToGroups: true
+        },
+        { merge: true }
+      );
+
+      if (legacyData.state.activeGroupId) {
+        setState((prev) => ({
+          ...prev,
+          activeGroupId: legacyData.state?.activeGroupId || null
+        }));
+      }
+    };
+
+    migrateLegacyState().catch((error) => {
+      setCloudStatus("error");
+      setCloudError(error?.message || "Migration failed.");
+    });
+  }, [authReady, authUser]);
+
+  useEffect(() => {
+    if (!authReady || !authUser) return;
     setCloudStatus("connecting");
-    setHydrated(false);
+    setGroupsLoaded(false);
+    const groupQuery = query(
+      collection(db, "groups"),
+      where("collaborators", "array-contains", authUser.uid)
+    );
 
     const unsubscribe = onSnapshot(
-      docRef,
+      groupQuery,
       (snapshot) => {
-        if (!snapshot.exists()) {
-          if (!initialized) {
-            initialized = true;
-            setCloudStatus("syncing");
-            setDoc(docRef, {
-              state: INITIAL_STATE,
-              updatedAt: serverTimestamp()
-            }).catch((error) => {
-              setCloudStatus("error");
-              setCloudError(error?.message || "Unable to initialize cloud data.");
-            });
-          }
-          return;
-        }
+        const groups = snapshot.docs.map((docSnap) => {
+          const data = docSnap.data() as Omit<Group, "id">;
+          return {
+            id: docSnap.id,
+            name: data.name || "Untitled trip",
+            members: data.members || [],
+            expenses: data.expenses || [],
+            currency: data.currency || "USD",
+            inviteCode: data.inviteCode || "",
+            ownerId: data.ownerId || "",
+            collaborators: data.collaborators || []
+          };
+        });
 
-        const data = snapshot.data() as { state?: AppState } | undefined;
-        if (data?.state) {
-          skipWriteRef.current = true;
-          setState(data.state);
-        }
+        setState((prev) => ({
+          ...prev,
+          groups,
+          activeGroupId: groups.find((group) => group.id === prev.activeGroupId)
+            ? prev.activeGroupId
+            : prev.activeGroupId
+              ? null
+              : prev.activeGroupId
+        }));
+        setGroupsLoaded(true);
         setHydrated(true);
         setCloudStatus("ready");
       },
       (error) => {
         setCloudStatus("error");
         setCloudError(error?.message || "Cloud sync failed.");
+        setGroupsLoaded(true);
         setHydrated(true);
       }
     );
 
     return () => unsubscribe();
-  }, [authReady, authUser, docRef]);
-
-  useEffect(() => {
-    if (!hydrated || !docRef) return;
-    if (skipWriteRef.current) {
-      skipWriteRef.current = false;
-      return;
-    }
-    setCloudStatus("syncing");
-    setDoc(
-      docRef,
-      {
-        state,
-        updatedAt: serverTimestamp()
-      },
-      { merge: true }
-    )
-      .then(() => setCloudStatus("ready"))
-      .catch((error) => {
-        setCloudStatus("error");
-        setCloudError(error?.message || "Cloud sync failed.");
-      });
-  }, [state, hydrated, docRef]);
+  }, [authReady, authUser]);
 
   useEffect(() => {
     if (!hydrated || viewInitialized) return;
@@ -420,38 +593,89 @@ export default function App() {
     setViewInitialized(true);
   }, [hydrated, viewInitialized, state.activeGroupId]);
 
-  const addGroup = useCallback(() => {
+  const addGroup = useCallback(async () => {
+    if (!authUser) return;
     const trimmed = groupName.trim();
     if (!trimmed) return;
-    const newGroup: Group = {
-      id: createId(),
-      name: trimmed,
-      members: [],
-      expenses: []
-    };
-    setState((prev) => ({
-      ...prev,
-      groups: [newGroup, ...prev.groups],
-      activeGroupId: newGroup.id
-    }));
-    setView("group");
-    setGroupName("");
-  }, [groupName]);
+    try {
+      const docRef = await addDoc(collection(db, "groups"), {
+        name: trimmed,
+        members: [],
+        expenses: [],
+        currency: groupCurrencyDraft || "USD",
+        inviteCode: createInviteCode(),
+        ownerId: authUser.uid,
+        collaborators: [authUser.uid],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      setState((prev) => ({
+        ...prev,
+        activeGroupId: docRef.id
+      }));
+      setView("group");
+      setGroupName("");
+      setGroupCurrencyDraft("USD");
+    } catch (error) {
+      setCloudStatus("error");
+      setCloudError(
+        error instanceof Error ? error.message : "Unable to create group."
+      );
+    }
+  }, [authUser, groupName, groupCurrencyDraft]);
 
-  const addMember = useCallback(() => {
+  const joinGroupByCode = useCallback(async () => {
+    if (!authUser) return;
+    const code = joinCode.trim().toUpperCase();
+    if (!code) return;
+    setJoinError("");
+    try {
+      const groupQuery = query(
+        collection(db, "groups"),
+        where("inviteCode", "==", code)
+      );
+      const snapshot = await getDocs(groupQuery);
+      if (snapshot.empty) {
+        setJoinError("No group found with that code.");
+        return;
+      }
+      const groupDoc = snapshot.docs[0];
+      await updateDoc(groupDoc.ref, {
+        collaborators: arrayUnion(authUser.uid),
+        updatedAt: serverTimestamp()
+      });
+      setJoinCode("");
+      setState((prev) => ({
+        ...prev,
+        activeGroupId: groupDoc.id
+      }));
+      setView("group");
+    } catch (error) {
+      setCloudStatus("error");
+      setCloudError(
+        error instanceof Error ? error.message : "Unable to join group."
+      );
+    }
+  }, [authUser, joinCode]);
+
+  const addMember = useCallback(async () => {
     if (!activeGroup) return;
     const trimmed = memberName.trim();
     if (!trimmed) return;
     const newMember: Member = { id: createId(), name: trimmed };
-    setState((prev) => ({
-      ...prev,
-      groups: prev.groups.map((group) =>
-        group.id === activeGroup.id
-          ? { ...group, members: [...group.members, newMember] }
-          : group
-      )
-    }));
-    setMemberName("");
+    const nextMembers = [...activeGroup.members, newMember];
+    try {
+      await updateDoc(doc(db, "groups", activeGroup.id), {
+        members: nextMembers,
+        updatedAt: serverTimestamp()
+      });
+      setMemberName("");
+    } catch (error) {
+      setCloudStatus("error");
+      setCloudError(
+        error instanceof Error ? error.message : "Unable to add member."
+      );
+    }
   }, [activeGroup, memberName]);
 
   const resetExpenseForm = useCallback(() => {
@@ -464,10 +688,12 @@ export default function App() {
       setPaidBy(activeGroup.members[0]?.id || "");
       setSplitBetween(activeGroup.members.map((member) => member.id));
     }
-  }, [activeGroup]);
+    setExpenseCurrency(baseCurrency);
+    setExpenseFxRate("1");
+  }, [activeGroup, baseCurrency]);
 
   const addExpense = useCallback(
-    (
+    async (
       nextPaidBy: string,
       nextSplitBetween: string[],
       nextSplitMode: "equal" | "custom",
@@ -475,8 +701,12 @@ export default function App() {
     ) => {
       if (!activeGroup) return;
       const title = expenseTitle.trim();
-      const amount = parseAmount(expenseAmount);
-      if (!title || Number.isNaN(amount) || amount <= 0) return;
+      const originalAmount = parseAmount(expenseAmount);
+      if (!title || Number.isNaN(originalAmount) || originalAmount <= 0) return;
+      const fxRate =
+        expenseCurrency === baseCurrency ? 1 : parseAmount(expenseFxRate);
+      if (!fxRate || fxRate <= 0) return;
+      const amount = roundToCents(originalAmount * fxRate);
 
       const fallbackSplit = nextSplitBetween.length
         ? nextSplitBetween
@@ -498,6 +728,9 @@ export default function App() {
         id: createId(),
         title,
         amount,
+        currency: expenseCurrency,
+        originalAmount,
+        fxRate: fxRate === 1 ? undefined : fxRate,
         paidBy: nextPaidBy,
         splitBetween: fallbackSplit,
         splitMode: nextSplitMode,
@@ -505,21 +738,35 @@ export default function App() {
         createdAt: new Date().toISOString()
       };
 
-      setState((prev) => ({
-        ...prev,
-        groups: prev.groups.map((group) =>
-          group.id === activeGroup.id
-            ? { ...group, expenses: [newExpense, ...group.expenses] }
-            : group
-        )
-      }));
-      resetExpenseForm();
+      const nextExpenses = [newExpense, ...activeGroup.expenses];
+      try {
+        await updateDoc(doc(db, "groups", activeGroup.id), {
+          expenses: nextExpenses,
+          updatedAt: serverTimestamp()
+        });
+        resetExpenseForm();
+      } catch (error) {
+        setCloudStatus("error");
+        setCloudError(
+          error instanceof Error
+            ? error.message
+            : "Unable to save expense."
+        );
+      }
     },
-    [activeGroup, expenseTitle, expenseAmount, resetExpenseForm]
+    [
+      activeGroup,
+      expenseTitle,
+      expenseAmount,
+      expenseCurrency,
+      expenseFxRate,
+      baseCurrency,
+      resetExpenseForm
+    ]
   );
 
   const saveExpenseEdits = useCallback(
-    (
+    async (
       nextPaidBy: string,
       nextSplitBetween: string[],
       nextSplitMode: "equal" | "custom",
@@ -527,8 +774,12 @@ export default function App() {
     ) => {
       if (!activeGroup || !editingExpenseId) return;
       const title = expenseTitle.trim();
-      const amount = parseAmount(expenseAmount);
-      if (!title || Number.isNaN(amount) || amount <= 0) return;
+      const originalAmount = parseAmount(expenseAmount);
+      if (!title || Number.isNaN(originalAmount) || originalAmount <= 0) return;
+      const fxRate =
+        expenseCurrency === baseCurrency ? 1 : parseAmount(expenseFxRate);
+      if (!fxRate || fxRate <= 0) return;
+      const amount = roundToCents(originalAmount * fxRate);
 
       const fallbackSplit = nextSplitBetween.length
         ? nextSplitBetween
@@ -546,32 +797,48 @@ export default function App() {
             }, {})
           : undefined;
 
-      setState((prev) => ({
-        ...prev,
-        groups: prev.groups.map((group) =>
-          group.id === activeGroup.id
-            ? {
-                ...group,
-                expenses: group.expenses.map((expense) =>
-                  expense.id === editingExpenseId
-                    ? {
-                        ...expense,
-                        title,
-                        amount,
-                        paidBy: nextPaidBy,
-                        splitBetween: fallbackSplit,
-                        splitMode: nextSplitMode,
-                        splitAmounts
-                      }
-                    : expense
-                )
-              }
-            : group
-        )
-      }));
-      resetExpenseForm();
+      const nextExpenses = activeGroup.expenses.map((expense) =>
+        expense.id === editingExpenseId
+          ? {
+              ...expense,
+              title,
+              amount,
+              currency: expenseCurrency,
+              originalAmount,
+              fxRate: fxRate === 1 ? undefined : fxRate,
+              paidBy: nextPaidBy,
+              splitBetween: fallbackSplit,
+              splitMode: nextSplitMode,
+              splitAmounts
+            }
+          : expense
+      );
+
+      try {
+        await updateDoc(doc(db, "groups", activeGroup.id), {
+          expenses: nextExpenses,
+          updatedAt: serverTimestamp()
+        });
+        resetExpenseForm();
+      } catch (error) {
+        setCloudStatus("error");
+        setCloudError(
+          error instanceof Error
+            ? error.message
+            : "Unable to update expense."
+        );
+      }
     },
-    [activeGroup, editingExpenseId, expenseTitle, expenseAmount, resetExpenseForm]
+    [
+      activeGroup,
+      editingExpenseId,
+      expenseTitle,
+      expenseAmount,
+      expenseCurrency,
+      expenseFxRate,
+      baseCurrency,
+      resetExpenseForm
+    ]
   );
 
   const startEditExpense = useCallback(
@@ -591,7 +858,14 @@ export default function App() {
       setView("group");
       setEditingExpenseId(expenseId);
       setExpenseTitle(expense.title);
-      setExpenseAmount(formatMoney(expense.amount));
+      const expenseCurrencyValue = expense.currency || baseCurrency;
+      const displayAmount =
+        expense.originalAmount ?? expense.amount ?? 0;
+      setExpenseAmount(formatMoney(displayAmount));
+      setExpenseCurrency(expenseCurrencyValue);
+      setExpenseFxRate(
+        expense.fxRate ? String(expense.fxRate) : "1"
+      );
       setPaidBy(expense.paidBy);
       const splitIds =
         expense.splitBetween.length > 0
@@ -609,31 +883,27 @@ export default function App() {
           : {}
       );
     },
-    [state.groups, state.activeGroupId]
+    [state.groups, state.activeGroupId, baseCurrency]
   );
 
   const confirmDeleteExpense = useCallback(
-    (groupId: string, expenseId: string) => {
+    async (groupId: string, expenseId: string) => {
       const ok = window.confirm("Delete this expense?");
       if (!ok) return;
-      setState((prev) => ({
-        ...prev,
-        groups: prev.groups.map((group) =>
-          group.id === groupId
-            ? {
-                ...group,
-                expenses: group.expenses.filter(
-                  (expense) => expense.id !== expenseId
-                )
-              }
-            : group
-        )
-      }));
+      const group = state.groups.find((item) => item.id === groupId);
+      if (!group) return;
+      const nextExpenses = group.expenses.filter(
+        (expense) => expense.id !== expenseId
+      );
+      await updateDoc(doc(db, "groups", groupId), {
+        expenses: nextExpenses,
+        updatedAt: serverTimestamp()
+      });
       if (editingExpenseId === expenseId) {
         resetExpenseForm();
       }
     },
-    [editingExpenseId, resetExpenseForm]
+    [editingExpenseId, resetExpenseForm, state.groups]
   );
 
   useEffect(() => {
@@ -643,6 +913,8 @@ export default function App() {
     setSplitBetween(activeGroup.members.map((member) => member.id));
     setSplitMode("equal");
     setCustomSplitAmounts({});
+    setExpenseCurrency(activeGroup.currency || "USD");
+    setExpenseFxRate("1");
   }, [activeGroup, editingExpenseId]);
 
   useEffect(() => {
@@ -656,6 +928,11 @@ export default function App() {
     });
   }, [activeGroup, splitBetween]);
 
+  useEffect(() => {
+    if (!activeGroup) return;
+    setGroupCurrencyDraft(activeGroup.currency || "USD");
+  }, [activeGroup]);
+
   const balances = useMemo(() => {
     return activeGroup ? computeBalances(activeGroup) : [];
   }, [activeGroup]);
@@ -668,6 +945,16 @@ export default function App() {
     () => parseAmount(expenseAmount),
     [expenseAmount]
   );
+  const fxRateNumber = useMemo(() => {
+    if (expenseCurrency === baseCurrency) return 1;
+    return parseAmount(expenseFxRate);
+  }, [expenseCurrency, expenseFxRate, baseCurrency]);
+  const expenseBaseAmount = useMemo(() => {
+    if (!fxRateNumber || fxRateNumber <= 0) return 0;
+    return roundToCents(expenseAmountNumber * fxRateNumber);
+  }, [expenseAmountNumber, fxRateNumber]);
+  const fxRateValid =
+    expenseCurrency === baseCurrency || (fxRateNumber > 0 && fxRateNumber !== 0);
 
   const customTotal = useMemo(() => {
     return splitBetween.reduce((sum, memberId) => {
@@ -678,12 +965,13 @@ export default function App() {
   const customTotalMatches =
     splitMode === "custom" &&
     splitBetween.length > 0 &&
-    Math.abs(roundToCents(customTotal) - roundToCents(expenseAmountNumber)) <=
+    Math.abs(roundToCents(customTotal) - roundToCents(expenseBaseAmount)) <=
       0.01;
 
   const canSubmitExpense =
     expenseTitle.trim().length > 0 &&
     expenseAmountNumber > 0 &&
+    fxRateValid &&
     paidBy.length > 0 &&
     (splitMode === "equal" ||
       (splitBetween.length > 0 && customTotalMatches));
@@ -693,7 +981,8 @@ export default function App() {
       group.expenses.map((expense) => ({
         ...expense,
         groupId: group.id,
-        groupName: group.name
+        groupName: group.name,
+        groupCurrency: group.currency || "USD"
       }))
     );
   }, [state.groups]);
@@ -705,9 +994,21 @@ export default function App() {
     );
   }, [allExpenses]);
 
+  const currencySet = useMemo(() => {
+    return new Set(state.groups.map((group) => group.currency || "USD"));
+  }, [state.groups]);
+
+  const singleCurrency = useMemo(() => {
+    if (currencySet.size === 1) {
+      return Array.from(currencySet)[0] || "USD";
+    }
+    return "USD";
+  }, [currencySet]);
+
   const totalSpent = useMemo(() => {
+    if (currencySet.size > 1) return null;
     return allExpenses.reduce((sum, expense) => sum + expense.amount, 0);
-  }, [allExpenses]);
+  }, [allExpenses, currencySet]);
 
   const totalExpenses = allExpenses.length;
   const totalGroups = state.groups.length;
@@ -719,7 +1020,8 @@ export default function App() {
     return state.groups
       .map((group) => ({
         group,
-        total: group.expenses.reduce((sum, expense) => sum + expense.amount, 0)
+        total: group.expenses.reduce((sum, expense) => sum + expense.amount, 0),
+        currency: group.currency || "USD"
       }))
       .sort((a, b) => b.total - a.total);
   }, [state.groups]);
@@ -727,7 +1029,7 @@ export default function App() {
   const memberPaidTotals = useMemo(() => {
     const totals: Record<
       string,
-      { name: string; groupName: string; total: number }
+      { name: string; groupName: string; total: number; currency: string }
     > = {};
     state.groups.forEach((group) => {
       const memberMap: Record<string, string> = {};
@@ -740,7 +1042,8 @@ export default function App() {
           totals[key] = {
             name: memberMap[expense.paidBy] || "Unknown",
             groupName: group.name,
-            total: 0
+            total: 0,
+            currency: group.currency || "USD"
           };
         }
         totals[key].total += expense.amount;
@@ -770,6 +1073,7 @@ export default function App() {
 
   const handleAuth = useCallback(async () => {
     setAuthError("");
+    setAuthResetMessage("");
     if (!authEmail.trim() || !authPassword.trim()) {
       setAuthError("Enter an email and password.");
       return;
@@ -792,6 +1096,26 @@ export default function App() {
     }
   }, [authEmail, authPassword, authMode]);
 
+  const handlePasswordReset = useCallback(async () => {
+    setAuthError("");
+    setAuthResetMessage("");
+    if (!authEmail.trim()) {
+      setAuthError("Enter your email to reset the password.");
+      return;
+    }
+    setAuthBusy(true);
+    try {
+      await sendPasswordResetEmail(auth, authEmail);
+      setAuthResetMessage("Password reset email sent.");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unable to send reset email.";
+      setAuthError(message);
+    } finally {
+      setAuthBusy(false);
+    }
+  }, [authEmail]);
+
   const handleSignOut = useCallback(async () => {
     await signOut(auth);
     setView("groups");
@@ -804,15 +1128,167 @@ export default function App() {
     const ok = window.confirm(confirmText);
     if (!ok) return;
 
-    setState((prev) => ({
-      ...prev,
-      groups: prev.groups.filter((group) => group.id !== activeGroup.id),
-      activeGroupId:
-        prev.activeGroupId === activeGroup.id ? null : prev.activeGroupId
-    }));
+    deleteDoc(doc(db, "groups", activeGroup.id)).catch((error) => {
+      setCloudStatus("error");
+      setCloudError(
+        error instanceof Error ? error.message : "Unable to delete group."
+      );
+    });
     resetExpenseForm();
     setView("groups");
   }, [activeGroup, resetExpenseForm]);
+
+  const handleCopyInvite = useCallback(async () => {
+    if (!activeGroup?.inviteCode) return;
+    try {
+      await navigator.clipboard.writeText(activeGroup.inviteCode);
+      setCopyMessage("Copied invite code!");
+      setTimeout(() => setCopyMessage(""), 2000);
+    } catch {
+      setCopyMessage("Copy failed.");
+      setTimeout(() => setCopyMessage(""), 2000);
+    }
+  }, [activeGroup]);
+
+  const saveGroupSettings = useCallback(async () => {
+    if (!activeGroup) return;
+    try {
+      await updateDoc(doc(db, "groups", activeGroup.id), {
+        currency: groupCurrencyDraft,
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      setCloudStatus("error");
+      setCloudError(
+        error instanceof Error ? error.message : "Unable to save settings."
+      );
+    }
+  }, [activeGroup, groupCurrencyDraft]);
+
+  const exportGroupCsv = useCallback(() => {
+    if (!activeGroup) return;
+    const memberNames: Record<string, string> = {};
+    activeGroup.members.forEach((member) => {
+      memberNames[member.id] = member.name;
+    });
+    const rows: (string | number)[][] = [
+      [
+        "Group",
+        "Date",
+        "Title",
+        "Amount",
+        "Base Currency",
+        "Original Amount",
+        "Original Currency",
+        "Paid By",
+        "Split Between",
+        "Split Mode"
+      ]
+    ];
+    activeGroup.expenses.forEach((expense) => {
+      rows.push([
+        activeGroup.name,
+        expense.createdAt,
+        expense.title,
+        formatMoney(expense.amount),
+        activeGroup.currency,
+        formatMoney(expense.originalAmount ?? expense.amount),
+        expense.currency || activeGroup.currency,
+        memberNames[expense.paidBy] || "",
+        expense.splitBetween
+          .map((id) => memberNames[id] || id)
+          .join(" | "),
+        expense.splitMode || "equal"
+      ]);
+    });
+    downloadCsv(
+      `${activeGroup.name.replace(/\\s+/g, "-").toLowerCase()}-expenses.csv`,
+      rows
+    );
+  }, [activeGroup]);
+
+  const exportAllCsv = useCallback(() => {
+    const rows: (string | number)[][] = [
+      [
+        "Group",
+        "Date",
+        "Title",
+        "Amount",
+        "Base Currency",
+        "Original Amount",
+        "Original Currency",
+        "Paid By",
+        "Split Between",
+        "Split Mode"
+      ]
+    ];
+
+    allExpenses.forEach((expense) => {
+      const members = memberNameByGroup[expense.groupId] || {};
+      rows.push([
+        expense.groupName,
+        expense.createdAt,
+        expense.title,
+        formatMoney(expense.amount),
+        expense.groupCurrency,
+        formatMoney(expense.originalAmount ?? expense.amount),
+        expense.currency || expense.groupCurrency,
+        members[expense.paidBy] || "",
+        expense.splitBetween.map((id) => members[id] || id).join(" | "),
+        expense.splitMode || "equal"
+      ]);
+    });
+
+    downloadCsv("tripsplit-all-expenses.csv", rows);
+  }, [allExpenses, memberNameByGroup]);
+
+  const handlePrint = useCallback(() => {
+    window.print();
+  }, []);
+
+  const scrollToSection = useCallback((id: string) => {
+    const element = document.getElementById(id);
+    if (!element) return;
+    element.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
+  const renderBottomNav = () => {
+    if (!authUser) return null;
+    return (
+      <nav className="bottom-nav no-print">
+        <button
+          className={view === "groups" ? "active" : ""}
+          onClick={() => {
+            setView("groups");
+            setState((prev) => ({ ...prev, activeGroupId: null }));
+          }}
+        >
+          <Icon name="home" />
+          <span>Groups</span>
+        </button>
+        <button
+          className={view === "master" ? "active" : ""}
+          onClick={() => setView("master")}
+        >
+          <Icon name="chart" />
+          <span>Dashboard</span>
+        </button>
+        <button
+          className={view === "group" ? "active" : ""}
+          onClick={() => {
+            if (activeGroup) {
+              scrollToSection("new-expense");
+            } else {
+              setView("groups");
+            }
+          }}
+        >
+          <Icon name="plus" />
+          <span>Add</span>
+        </button>
+      </nav>
+    );
+  };
 
   if (!authReady) {
     return (
@@ -866,6 +1342,9 @@ export default function App() {
             }
           />
           {authError ? <div className="auth-error">{authError}</div> : null}
+          {authResetMessage ? (
+            <div className="auth-success">{authResetMessage}</div>
+          ) : null}
           <button className="primary" onClick={handleAuth} disabled={authBusy}>
             {authBusy
               ? "Please wait..."
@@ -873,6 +1352,11 @@ export default function App() {
                 ? "Create account"
                 : "Sign in"}
           </button>
+          {authMode === "signin" && (
+            <button className="link auth-toggle" onClick={handlePasswordReset}>
+              Forgot password?
+            </button>
+          )}
           <button
             className="link auth-toggle"
             onClick={() =>
@@ -921,7 +1405,11 @@ export default function App() {
           </div>
           <div className="stat-row">
             <span>Total spent</span>
-            <strong>${formatMoney(totalSpent)}</strong>
+            <strong>
+              {totalSpent === null
+                ? "Mixed currencies"
+                : formatCurrencyValue(totalSpent, singleCurrency)}
+            </strong>
           </div>
           <div className="stat-row">
             <span>Groups</span>
@@ -937,6 +1425,21 @@ export default function App() {
           </div>
         </section>
 
+        <section className="card">
+          <div className="section-heading">
+            <Icon name="download" />
+            <h2>Export</h2>
+          </div>
+          <div className="select-row">
+            <button className="pill" onClick={exportAllCsv}>
+              <Icon name="download" /> CSV
+            </button>
+            <button className="pill" onClick={handlePrint}>
+              <Icon name="printer" /> Print/PDF
+            </button>
+          </div>
+        </section>
+
         <section>
           <div className="section-heading">
             <Icon name="list" />
@@ -945,10 +1448,10 @@ export default function App() {
           {groupTotals.length === 0 ? (
             <p className="muted">No groups yet.</p>
           ) : (
-            groupTotals.map(({ group, total }) => (
+            groupTotals.map(({ group, total, currency }) => (
               <div className="row" key={group.id}>
                 <span>{group.name}</span>
-                <strong>${formatMoney(total)}</strong>
+                <strong>{formatCurrencyValue(total, currency)}</strong>
               </div>
             ))
           )}
@@ -968,7 +1471,7 @@ export default function App() {
                   <div className="row-title">{row.name}</div>
                   <div className="row-meta">{row.groupName}</div>
                 </div>
-                <strong>${formatMoney(row.total)}</strong>
+                <strong>{formatCurrencyValue(row.total, row.currency)}</strong>
               </div>
             ))
           )}
@@ -991,10 +1494,27 @@ export default function App() {
                       {expense.groupName} · Paid by{" "}
                       {memberNameByGroup[expense.groupId]?.[expense.paidBy] ||
                         "Unknown"}
+                      {" · "}
+                      {(expense.currency || expense.groupCurrency).toUpperCase()}
                     </div>
                   </div>
                   <div className="expense-actions">
-                    <strong>${formatMoney(expense.amount)}</strong>
+                    <strong>
+                      {formatCurrencyValue(
+                        expense.amount,
+                        expense.groupCurrency
+                      )}
+                    </strong>
+                    {expense.currency &&
+                    expense.currency !== expense.groupCurrency &&
+                    expense.originalAmount ? (
+                      <span className="expense-sub">
+                        {formatCurrencyValue(
+                          expense.originalAmount,
+                          expense.currency
+                        )}
+                      </span>
+                    ) : null}
                     <div className="action-row">
                       <button
                         className="pill"
@@ -1019,6 +1539,7 @@ export default function App() {
             ))
           )}
         </section>
+        {renderBottomNav()}
       </div>
     );
   }
@@ -1057,8 +1578,36 @@ export default function App() {
             onChange={(event) => setGroupName(event.target.value)}
             placeholder="e.g. Tokyo 2026"
           />
+          <div className="select-row">
+            <select
+              value={groupCurrencyDraft}
+              onChange={(event) => setGroupCurrencyDraft(event.target.value)}
+            >
+              {currencyOptions.map((option) => (
+                <option key={option.code} value={option.code}>
+                  {option.code} · {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
           <button className="primary" onClick={addGroup}>
             Add group
+          </button>
+        </section>
+
+        <section className="card">
+          <div className="section-heading">
+            <Icon name="share" />
+            <h2>Join with code</h2>
+          </div>
+          <input
+            value={joinCode}
+            onChange={(event) => setJoinCode(event.target.value)}
+            placeholder="Enter invite code"
+          />
+          {joinError ? <div className="auth-error">{joinError}</div> : null}
+          <button className="primary" onClick={joinGroupByCode}>
+            Join group
           </button>
         </section>
 
@@ -1105,6 +1654,7 @@ export default function App() {
             ))
           )}
         </section>
+        {renderBottomNav()}
       </div>
     );
   }
@@ -1160,7 +1710,56 @@ export default function App() {
         </button>
       </section>
 
-      <section>
+      <section className="card">
+        <div className="section-heading">
+          <Icon name="settings" />
+          <h2>Group settings</h2>
+        </div>
+        <div className="field">
+          <span>Base currency</span>
+          <div className="select-row">
+            <select
+              value={groupCurrencyDraft}
+              onChange={(event) => setGroupCurrencyDraft(event.target.value)}
+            >
+              {currencyOptions.map((option) => (
+                <option key={option.code} value={option.code}>
+                  {option.code} · {option.label}
+                </option>
+              ))}
+            </select>
+            <button className="pill" onClick={saveGroupSettings}>
+              Save
+            </button>
+          </div>
+          <div className="help-text">
+            Changing the base currency will not convert past expenses.
+          </div>
+        </div>
+        <div className="field">
+          <span>Invite code</span>
+          <div className="select-row">
+            <input value={activeGroup.inviteCode} readOnly />
+            <button className="pill" onClick={handleCopyInvite}>
+              Copy
+            </button>
+          </div>
+          {copyMessage ? <div className="help-text">{copyMessage}</div> : null}
+        </div>
+        <div className="field">
+          <span>Export</span>
+          <div className="select-row">
+            <button className="pill" onClick={exportGroupCsv}>
+              <Icon name="download" /> CSV
+            </button>
+            <button className="pill" onClick={handlePrint}>
+              <Icon name="printer" /> Print/PDF
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section id="new-expense">
         <div className="section-heading">
           <Icon name="balance" />
           <h2>Balances</h2>
@@ -1172,7 +1771,8 @@ export default function App() {
             <div className="row" key={member.id}>
               <span>{member.name}</span>
               <strong className={balance >= 0 ? "positive" : "negative"}>
-                {balance >= 0 ? "+" : ""}${formatMoney(balance)}
+                {balance >= 0 ? "+" : "-"}
+                {formatCurrencyValue(Math.abs(balance), baseCurrency)}
               </strong>
             </div>
           ))
@@ -1192,7 +1792,7 @@ export default function App() {
               <span>
                 {settlement.from.name} pays {settlement.to.name}
               </span>
-              <strong>${formatMoney(settlement.amount)}</strong>
+              <strong>{formatCurrencyValue(settlement.amount, baseCurrency)}</strong>
             </div>
           ))
         )}
@@ -1226,6 +1826,41 @@ export default function App() {
               placeholder="$0.00"
               inputMode="decimal"
             />
+
+            <div className="field">
+              <span>Currency</span>
+              <div className="select-row">
+                <select
+                  value={expenseCurrency}
+                  onChange={(event) => setExpenseCurrency(event.target.value)}
+                >
+                  {currencyOptions.map((option) => (
+                    <option key={option.code} value={option.code}>
+                      {option.code} · {option.label}
+                    </option>
+                  ))}
+                </select>
+                {expenseCurrency !== baseCurrency && (
+                  <input
+                    value={expenseFxRate}
+                    onChange={(event) => setExpenseFxRate(event.target.value)}
+                    placeholder={`Rate to ${baseCurrency}`}
+                    inputMode="decimal"
+                  />
+                )}
+              </div>
+              <div className="help-text">
+                Base currency: {baseCurrency}.{" "}
+                {expenseCurrency === baseCurrency
+                  ? "No conversion needed."
+                  : fxRateValid
+                    ? `Converted total: ${formatCurrencyValue(
+                        expenseBaseAmount,
+                        baseCurrency
+                      )}`
+                    : "Enter a valid exchange rate."}
+              </div>
+            </div>
 
             <div className="field">
               <span>Paid by</span>
@@ -1294,7 +1929,7 @@ export default function App() {
                       }
                       return buildEqualCustomAmounts(
                         splitBetween,
-                        expenseAmountNumber
+                        expenseBaseAmount
                       );
                     });
                   }}
@@ -1334,15 +1969,22 @@ export default function App() {
                 <div className="split-total">
                   <span>Custom total</span>
                   <strong>
-                    ${formatMoney(customTotal)} / ${formatMoney(expenseAmountNumber)}
+                    {formatCurrencyValue(customTotal, baseCurrency)} /{" "}
+                    {formatCurrencyValue(expenseBaseAmount, baseCurrency)}
                   </strong>
                 </div>
-                {expenseAmountNumber <= 0 ? (
+                {!fxRateValid ? (
+                  <p className="warning">
+                    Enter a valid exchange rate to continue.
+                  </p>
+                ) : expenseBaseAmount <= 0 ? (
                   <p className="warning">
                     Enter the expense total to validate the custom split.
                   </p>
                 ) : !customTotalMatches ? (
-                  <p className="warning">Custom split must match the total.</p>
+                  <p className="warning">
+                    Custom split must match the total in {baseCurrency}.
+                  </p>
                 ) : null}
               </div>
             )}
@@ -1392,10 +2034,19 @@ export default function App() {
                   {expense.splitMode === "custom"
                     ? "Custom split"
                     : `Split ${expense.splitBetween.length} ways`}
+                  {" · "}
+                  {(expense.currency || baseCurrency).toUpperCase()}
                 </div>
               </div>
               <div className="expense-actions">
-                <strong>${formatMoney(expense.amount)}</strong>
+                <strong>{formatCurrencyValue(expense.amount, baseCurrency)}</strong>
+                {expense.currency &&
+                expense.currency !== baseCurrency &&
+                expense.originalAmount ? (
+                  <span className="expense-sub">
+                    {formatCurrencyValue(expense.originalAmount, expense.currency)}
+                  </span>
+                ) : null}
                 <div className="action-row">
                   <button
                     className="pill"
@@ -1417,6 +2068,7 @@ export default function App() {
           ))
         )}
       </section>
+      {renderBottomNav()}
     </div>
   );
 }
