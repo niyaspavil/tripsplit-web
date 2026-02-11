@@ -348,6 +348,46 @@ const buildCustomAmountsFromExpense = (
   return result;
 };
 
+const buildExpensePayload = (params: {
+  id: string;
+  title: string;
+  amount: number;
+  currency: string;
+  originalAmount: number;
+  fxRate: number;
+  paidBy: string;
+  splitBetween: string[];
+  splitMode: "equal" | "custom";
+  splitAmounts?: Record<string, number>;
+  createdAt: string;
+}): Expense => {
+  const payload: Expense = {
+    id: params.id,
+    title: params.title,
+    amount: params.amount,
+    currency: params.currency,
+    originalAmount: params.originalAmount,
+    paidBy: params.paidBy,
+    splitBetween: params.splitBetween,
+    splitMode: params.splitMode,
+    createdAt: params.createdAt
+  };
+
+  if (params.fxRate !== 1) {
+    payload.fxRate = params.fxRate;
+  }
+
+  if (
+    params.splitMode === "custom" &&
+    params.splitAmounts &&
+    Object.keys(params.splitAmounts).length > 0
+  ) {
+    payload.splitAmounts = params.splitAmounts;
+  }
+
+  return payload;
+};
+
 const computeBalances = (group: Group) => {
   const balances: Record<string, number> = {};
   group.members.forEach((member) => {
@@ -355,6 +395,10 @@ const computeBalances = (group: Group) => {
   });
 
   for (const expense of group.expenses) {
+    if (!expense.paidBy) continue;
+    if (!(expense.paidBy in balances)) {
+      balances[expense.paidBy] = 0;
+    }
     balances[expense.paidBy] += expense.amount;
     const hasCustomSplit =
       (expense.splitMode === "custom" || !!expense.splitAmounts) &&
@@ -363,12 +407,22 @@ const computeBalances = (group: Group) => {
 
     if (hasCustomSplit && expense.splitAmounts) {
       for (const [memberId, amount] of Object.entries(expense.splitAmounts)) {
+        if (!(memberId in balances)) {
+          balances[memberId] = 0;
+        }
         balances[memberId] -= amount;
       }
     } else {
-      const splitCount = expense.splitBetween.length || 1;
+      const splitMembers =
+        Array.isArray(expense.splitBetween) && expense.splitBetween.length > 0
+          ? expense.splitBetween
+          : [expense.paidBy];
+      const splitCount = splitMembers.length || 1;
       const share = expense.amount / splitCount;
-      for (const memberId of expense.splitBetween) {
+      for (const memberId of splitMembers) {
+        if (!(memberId in balances)) {
+          balances[memberId] = 0;
+        }
         balances[memberId] -= share;
       }
     }
@@ -724,19 +778,19 @@ export default function App() {
             }, {})
           : undefined;
 
-      const newExpense: Expense = {
+      const newExpense = buildExpensePayload({
         id: createId(),
         title,
         amount,
         currency: expenseCurrency,
         originalAmount,
-        fxRate: fxRate === 1 ? undefined : fxRate,
+        fxRate,
         paidBy: nextPaidBy,
         splitBetween: fallbackSplit,
         splitMode: nextSplitMode,
         splitAmounts,
         createdAt: new Date().toISOString()
-      };
+      });
 
       const nextExpenses = [newExpense, ...activeGroup.expenses];
       try {
@@ -799,18 +853,19 @@ export default function App() {
 
       const nextExpenses = activeGroup.expenses.map((expense) =>
         expense.id === editingExpenseId
-          ? {
-              ...expense,
+          ? buildExpensePayload({
+              id: expense.id,
               title,
               amount,
               currency: expenseCurrency,
               originalAmount,
-              fxRate: fxRate === 1 ? undefined : fxRate,
+              fxRate,
               paidBy: nextPaidBy,
               splitBetween: fallbackSplit,
               splitMode: nextSplitMode,
-              splitAmounts
-            }
+              splitAmounts,
+              createdAt: expense.createdAt
+            })
           : expense
       );
 
@@ -867,9 +922,12 @@ export default function App() {
         expense.fxRate ? String(expense.fxRate) : "1"
       );
       setPaidBy(expense.paidBy);
+      const expenseSplitBetween = Array.isArray(expense.splitBetween)
+        ? expense.splitBetween
+        : [];
       const splitIds =
-        expense.splitBetween.length > 0
-          ? expense.splitBetween
+        expenseSplitBetween.length > 0
+          ? expenseSplitBetween
           : expense.splitAmounts
             ? Object.keys(expense.splitAmounts)
             : [expense.paidBy];
@@ -2033,7 +2091,7 @@ export default function App() {
                   {" · "}
                   {expense.splitMode === "custom"
                     ? "Custom split"
-                    : `Split ${expense.splitBetween.length} ways`}
+                    : `Split ${expense.splitBetween?.length || 0} ways`}
                   {" · "}
                   {(expense.currency || baseCurrency).toUpperCase()}
                 </div>
