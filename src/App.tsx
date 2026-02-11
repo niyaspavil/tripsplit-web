@@ -76,11 +76,25 @@ type MasterExpense = Expense & {
   groupCurrency: string;
 };
 
+type ThemePreset = "postcard" | "metro" | "sunset";
+
 const createId = () =>
   `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
 const createInviteCode = () =>
   Math.random().toString(36).slice(2, 8).toUpperCase();
+
+const THEME_STORAGE_KEY = "tripsplit-theme";
+const DEFAULT_THEME: ThemePreset = "postcard";
+const themeOptions: { id: ThemePreset; label: string }[] = [
+  { id: "postcard", label: "Postcard" },
+  { id: "metro", label: "Metro" },
+  { id: "sunset", label: "Sunset" }
+];
+
+const isThemePreset = (value: string | null): value is ThemePreset => {
+  return themeOptions.some((option) => option.id === value);
+};
 
 const currencyOptions = [
   { code: "USD", label: "US Dollar", symbol: "$" },
@@ -487,6 +501,11 @@ const computeSettlements = (
 };
 
 export default function App() {
+  const [themePreset, setThemePreset] = useState<ThemePreset>(() => {
+    if (typeof window === "undefined") return DEFAULT_THEME;
+    const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
+    return isThemePreset(saved) ? saved : DEFAULT_THEME;
+  });
   const [state, setState] = useState<AppState>(INITIAL_STATE);
   const [hydrated, setHydrated] = useState(false);
   const [cloudStatus, setCloudStatus] = useState<
@@ -529,6 +548,15 @@ export default function App() {
   }, [state.groups, state.activeGroupId]);
 
   const baseCurrency = activeGroup?.currency || "USD";
+
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      document.documentElement.setAttribute("data-theme", themePreset);
+    }
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(THEME_STORAGE_KEY, themePreset);
+    }
+  }, [themePreset]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -1359,9 +1387,28 @@ export default function App() {
     );
   };
 
+  const renderThemeSwitcher = () => (
+    <aside className="theme-switcher no-print" aria-label="Select visual style">
+      <span className="theme-label">Style</span>
+      <div className="theme-pill-row">
+        {themeOptions.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            className={themePreset === option.id ? "theme-chip active" : "theme-chip"}
+            onClick={() => setThemePreset(option.id)}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </aside>
+  );
+
   if (!authReady) {
     return (
       <div className="page">
+        {renderThemeSwitcher()}
         <header className="page-header">
           <h1 className="app-title">
             <span className="title-icon">
@@ -1378,6 +1425,7 @@ export default function App() {
   if (!authUser) {
     return (
       <div className="page auth-page">
+        {renderThemeSwitcher()}
         <header className="page-header">
           <h1 className="app-title">
             <span className="title-icon">
@@ -1444,6 +1492,7 @@ export default function App() {
   if (view === "master") {
     return (
       <div className="page">
+        {renderThemeSwitcher()}
         <header className="page-header">
           <button className="link" onClick={() => setView("groups")}
             >Back to groups</button>
@@ -1616,6 +1665,7 @@ export default function App() {
   if (view !== "group" || !activeGroup) {
     return (
       <div className="page">
+        {renderThemeSwitcher()}
         <header className="page-header">
           <h1 className="app-title">
             <span className="title-icon">
@@ -1730,6 +1780,7 @@ export default function App() {
 
   return (
     <div className="page">
+      {renderThemeSwitcher()}
       <header className="page-header">
         <button
           className="link"
