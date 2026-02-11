@@ -73,7 +73,7 @@ body::after {
   display: flex;
   flex-direction: column;
   gap: 22px;
-  padding-bottom: 80px;
+  padding-bottom: 120px;
 }
 
 .page-header {
@@ -188,6 +188,11 @@ h2 {
   font-size: 12px;
 }
 
+.auth-success {
+  color: #2f7d57;
+  font-size: 12px;
+}
+
 .auth-toggle {
   margin-top: 6px;
   text-align: left;
@@ -231,6 +236,30 @@ input {
   font-family: inherit;
   appearance: none;
   border: 1px solid #efe4d4;
+}
+
+select {
+  border: 1px solid #efe4d4;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 12px 14px;
+  font-size: 14px;
+  color: var(--ink);
+  font-family: inherit;
+  appearance: none;
+  min-width: 160px;
+}
+
+.select-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.help-text {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 button {
@@ -329,6 +358,14 @@ button:hover {
   font-size: 13px;
   border: 1px solid #e2dacd;
   background: #faf6ef;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pill svg {
+  width: 14px;
+  height: 14px;
 }
 
 .pill.active {
@@ -406,6 +443,11 @@ button:hover {
   gap: 8px;
 }
 
+.expense-sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .action-row {
   display: flex;
   gap: 8px;
@@ -436,6 +478,46 @@ button:focus-visible {
 
 button:active {
   transform: translateY(1px);
+}
+
+.bottom-nav {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  display: none;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(12px);
+  z-index: 20;
+}
+
+.bottom-nav button {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+}
+
+.bottom-nav button svg {
+  width: 18px;
+  height: 18px;
+}
+
+.bottom-nav button.active {
+  border-color: #e5dac9;
+  background: #f8f3ea;
 }
 
 @media (max-width: 720px) {
@@ -497,6 +579,10 @@ button:active {
   .section-heading {
     gap: 8px;
   }
+
+  .bottom-nav {
+    display: grid;
+  }
 }
 
 @media (max-width: 480px) {
@@ -510,5 +596,26 @@ button:active {
 
   .pill {
     padding: 6px 10px;
+  }
+}
+
+@media print {
+  body {
+    background: white;
+  }
+
+  .no-print,
+  .bottom-nav,
+  button,
+  .link,
+  input,
+  select {
+    display: none !important;
+  }
+
+  .page-header {
+    box-shadow: none;
+    border: none;
+    background: none;
   }
 }
