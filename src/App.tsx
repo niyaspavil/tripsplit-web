@@ -77,6 +77,7 @@ type MasterExpense = Expense & {
 };
 
 type ThemePreset = "postcard" | "metro" | "sunset";
+type GroupSection = "overview" | "members" | "add-expense" | "expenses" | "settings";
 
 const createId = () =>
   `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -521,6 +522,7 @@ export default function App() {
   const [authBusy, setAuthBusy] = useState(false);
   const [authResetMessage, setAuthResetMessage] = useState("");
   const [view, setView] = useState<"groups" | "group" | "master">("groups");
+  const [groupSection, setGroupSection] = useState<GroupSection>("overview");
   const [viewInitialized, setViewInitialized] = useState(false);
   const [groupsLoaded, setGroupsLoaded] = useState(false);
   const [joinCode, setJoinCode] = useState("");
@@ -707,6 +709,7 @@ export default function App() {
         activeGroupId: docRef.id
       }));
       setView("group");
+      setGroupSection("members");
       setGroupName("");
       setGroupCurrencyDraft("USD");
     } catch (error) {
@@ -743,6 +746,7 @@ export default function App() {
         activeGroupId: groupDoc.id
       }));
       setView("group");
+      setGroupSection("overview");
     } catch (error) {
       setCloudStatus("error");
       setCloudError(
@@ -950,6 +954,7 @@ export default function App() {
       }
 
       setView("group");
+      setGroupSection("add-expense");
       setEditingExpenseId(expenseId);
       setExpenseTitle(expense.title);
       const expenseCurrencyValue = expense.currency || baseCurrency;
@@ -1037,6 +1042,14 @@ export default function App() {
   const settlements = useMemo(() => {
     return activeGroup ? computeSettlements(balances) : [];
   }, [activeGroup, balances]);
+
+  const memberPaidById = useMemo(() => {
+    if (!activeGroup) return {} as Record<string, number>;
+    return activeGroup.expenses.reduce<Record<string, number>>((acc, expense) => {
+      acc[expense.paidBy] = (acc[expense.paidBy] || 0) + expense.amount;
+      return acc;
+    }, {});
+  }, [activeGroup]);
 
   const expenseAmountNumber = useMemo(
     () => parseAmount(expenseAmount),
@@ -1216,6 +1229,7 @@ export default function App() {
   const handleSignOut = useCallback(async () => {
     await signOut(auth);
     setView("groups");
+    setGroupSection("overview");
     setViewInitialized(false);
   }, []);
 
@@ -1233,6 +1247,7 @@ export default function App() {
     });
     resetExpenseForm();
     setView("groups");
+    setGroupSection("overview");
   }, [activeGroup, resetExpenseForm]);
 
   const handleCopyInvite = useCallback(async () => {
@@ -1343,12 +1358,6 @@ export default function App() {
     window.print();
   }, []);
 
-  const scrollToSection = useCallback((id: string) => {
-    const element = document.getElementById(id);
-    if (!element) return;
-    element.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, []);
-
   const renderBottomNav = () => {
     if (!authUser) return null;
     return (
@@ -1357,6 +1366,7 @@ export default function App() {
           className={view === "groups" ? "active" : ""}
           onClick={() => {
             setView("groups");
+            setGroupSection("overview");
             setState((prev) => ({ ...prev, activeGroupId: null }));
           }}
         >
@@ -1374,9 +1384,11 @@ export default function App() {
           className={view === "group" ? "active" : ""}
           onClick={() => {
             if (activeGroup) {
-              scrollToSection("new-expense");
+              setView("group");
+              setGroupSection("add-expense");
             } else {
               setView("groups");
+              setGroupSection("overview");
             }
           }}
         >
@@ -1494,8 +1506,15 @@ export default function App() {
       <div className="page">
         {renderThemeSwitcher()}
         <header className="page-header">
-          <button className="link" onClick={() => setView("groups")}
-            >Back to groups</button>
+          <button
+            className="link"
+            onClick={() => {
+              setView("groups");
+              setGroupSection("overview");
+            }}
+          >
+            Back to groups
+          </button>
           <div className="header-actions">
             <div className={`cloud-status ${cloudStatus}`}>{cloudLabel}</div>
             <button className="link" onClick={handleSignOut}>
@@ -1761,6 +1780,7 @@ export default function App() {
                     activeGroupId: group.id
                   }));
                   setView("group");
+                  setGroupSection("overview");
                 }}
               >
                 <div>
@@ -1790,6 +1810,7 @@ export default function App() {
               activeGroupId: null
             }));
             setView("groups");
+            setGroupSection("overview");
             resetExpenseForm();
           }}
         >
@@ -1815,379 +1836,486 @@ export default function App() {
         ) : null}
       </header>
 
-      <section className="card">
-        <div className="section-heading">
-          <Icon name="users" />
-          <h2>Add members</h2>
-        </div>
-        <input
-          value={memberName}
-          onChange={(event) => setMemberName(event.target.value)}
-          placeholder="Friend name"
-        />
-        <button className="primary" onClick={addMember}>
-          Add member
+      <nav className="group-section-nav no-print" aria-label="Group sections">
+        <button
+          className={groupSection === "overview" ? "active" : ""}
+          onClick={() => setGroupSection("overview")}
+        >
+          <Icon name="chart" />
+          <span>Overview</span>
         </button>
-      </section>
-
-      <section className="card">
-        <div className="section-heading">
+        <button
+          className={groupSection === "members" ? "active" : ""}
+          onClick={() => setGroupSection("members")}
+        >
+          <Icon name="users" />
+          <span>Members</span>
+        </button>
+        <button
+          className={groupSection === "add-expense" ? "active" : ""}
+          onClick={() => setGroupSection("add-expense")}
+        >
+          <Icon name="plus" />
+          <span>{editingExpenseId ? "Edit" : "Add"}</span>
+        </button>
+        <button
+          className={groupSection === "expenses" ? "active" : ""}
+          onClick={() => setGroupSection("expenses")}
+        >
+          <Icon name="list" />
+          <span>Expenses</span>
+        </button>
+        <button
+          className={groupSection === "settings" ? "active" : ""}
+          onClick={() => setGroupSection("settings")}
+        >
           <Icon name="settings" />
-          <h2>Group settings</h2>
-        </div>
-        <div className="field">
-          <span>Base currency</span>
-          <div className="select-row">
-            <select
-              value={groupCurrencyDraft}
-              onChange={(event) => setGroupCurrencyDraft(event.target.value)}
-            >
-              {currencyOptions.map((option) => (
-                <option key={option.code} value={option.code}>
-                  {option.code} · {option.label}
-                </option>
-              ))}
-            </select>
-            <button className="pill" onClick={saveGroupSettings}>
-              Save
-            </button>
-          </div>
-          <div className="help-text">
-            Changing the base currency will not convert past expenses.
-          </div>
-        </div>
-        <div className="field">
-          <span>Invite code</span>
-          <div className="select-row">
-            <input value={activeGroup.inviteCode} readOnly />
-            <button className="pill" onClick={handleCopyInvite}>
-              Copy
-            </button>
-          </div>
-          {copyMessage ? <div className="help-text">{copyMessage}</div> : null}
-        </div>
-        <div className="field">
-          <span>Export</span>
-          <div className="select-row">
-            <button className="pill" onClick={exportGroupCsv}>
-              <Icon name="download" /> CSV
-            </button>
-            <button className="pill" onClick={handlePrint}>
-              <Icon name="printer" /> Print/PDF
-            </button>
-          </div>
-        </div>
-      </section>
+          <span>Settings</span>
+        </button>
+      </nav>
 
-      <section id="new-expense">
-        <div className="section-heading">
-          <Icon name="balance" />
-          <h2>Balances</h2>
-        </div>
-        {balances.length === 0 ? (
-          <p className="muted">Add members to start splitting.</p>
-        ) : (
-          balances.map(({ member, balance }) => (
-            <div className="row" key={member.id}>
-              <span>{member.name}</span>
-              <strong className={balance >= 0 ? "positive" : "negative"}>
-                {balance >= 0 ? "+" : "-"}
-                {formatCurrencyValue(Math.abs(balance), baseCurrency)}
+      {groupSection === "overview" ? (
+        <>
+          <section className="card">
+            <div className="section-heading">
+              <Icon name="wallet" />
+              <h2>Trip summary</h2>
+            </div>
+            <div className="stat-row">
+              <span>Total spent</span>
+              <strong>
+                {formatCurrencyValue(
+                  activeGroup.expenses.reduce((sum, expense) => sum + expense.amount, 0),
+                  baseCurrency
+                )}
               </strong>
             </div>
-          ))
-        )}
-      </section>
-
-      <section>
-        <div className="section-heading">
-          <Icon name="wallet" />
-          <h2>Settle up</h2>
-        </div>
-        {settlements.length === 0 ? (
-          <p className="muted">Everyone is even or no expenses yet.</p>
-        ) : (
-          settlements.map((settlement, index) => (
-            <div className="row highlight" key={`${settlement.from.id}-${index}`}>
-              <span>
-                {settlement.from.name} pays {settlement.to.name}
-              </span>
-              <strong>{formatCurrencyValue(settlement.amount, baseCurrency)}</strong>
+            <div className="stat-row">
+              <span>Members</span>
+              <strong>{activeGroup.members.length}</strong>
             </div>
-          ))
-        )}
-      </section>
+            <div className="stat-row">
+              <span>Expenses</span>
+              <strong>{activeGroup.expenses.length}</strong>
+            </div>
+          </section>
 
-      <section>
-        <div className="section-heading">
-          <Icon name="receipt" />
-          <h2>{editingExpenseId ? "Edit expense" : "New expense"}</h2>
-        </div>
-        {activeGroup.members.length === 0 ? (
-          <p className="muted">Add members before logging expenses.</p>
-        ) : (
-          <div className="card">
-            {editingExpenseId && (
-              <div className="edit-banner">
-                <span>Editing expense</span>
-                <button className="pill" onClick={resetExpenseForm}>
-                  Cancel
-                </button>
-              </div>
+          <section>
+            <div className="section-heading">
+              <Icon name="balance" />
+              <h2>Balances</h2>
+            </div>
+            {balances.length === 0 ? (
+              <p className="muted">Add members to start splitting.</p>
+            ) : (
+              balances.map(({ member, balance }) => (
+                <div className="row" key={member.id}>
+                  <span>{member.name}</span>
+                  <strong className={balance >= 0 ? "positive" : "negative"}>
+                    {balance >= 0 ? "+" : "-"}
+                    {formatCurrencyValue(Math.abs(balance), baseCurrency)}
+                  </strong>
+                </div>
+              ))
             )}
-            <input
-              value={expenseTitle}
-              onChange={(event) => setExpenseTitle(event.target.value)}
-              placeholder="Expense title"
-            />
-            <input
-              value={expenseAmount}
-              onChange={(event) => setExpenseAmount(event.target.value)}
-              placeholder="$0.00"
-              inputMode="decimal"
-            />
+          </section>
 
-            <div className="field">
-              <span>Currency</span>
-              <div className="select-row">
-                <select
-                  value={expenseCurrency}
-                  onChange={(event) => setExpenseCurrency(event.target.value)}
-                >
-                  {currencyOptions.map((option) => (
-                    <option key={option.code} value={option.code}>
-                      {option.code} · {option.label}
-                    </option>
-                  ))}
-                </select>
-                {expenseCurrency !== baseCurrency && (
-                  <input
-                    value={expenseFxRate}
-                    onChange={(event) => setExpenseFxRate(event.target.value)}
-                    placeholder={`Rate to ${baseCurrency}`}
-                    inputMode="decimal"
-                  />
-                )}
-              </div>
-              <div className="help-text">
-                Base currency: {baseCurrency}.{" "}
-                {expenseCurrency === baseCurrency
-                  ? "No conversion needed."
-                  : fxRateValid
-                    ? `Converted total: ${formatCurrencyValue(
-                        expenseBaseAmount,
-                        baseCurrency
-                      )}`
-                    : "Enter a valid exchange rate."}
-              </div>
+          <section>
+            <div className="section-heading">
+              <Icon name="wallet" />
+              <h2>Settle up</h2>
             </div>
+            {settlements.length === 0 ? (
+              <p className="muted">Everyone is even or no expenses yet.</p>
+            ) : (
+              settlements.map((settlement, index) => (
+                <div className="row highlight" key={`${settlement.from.id}-${index}`}>
+                  <span>
+                    {settlement.from.name} pays {settlement.to.name}
+                  </span>
+                  <strong>{formatCurrencyValue(settlement.amount, baseCurrency)}</strong>
+                </div>
+              ))
+            )}
+          </section>
+        </>
+      ) : null}
 
-            <div className="field">
-              <span>Paid by</span>
-              <div className="pill-row">
-                {activeGroup.members.map((member) => (
-                  <button
-                    key={member.id}
-                    className={
-                      paidBy === member.id ? "pill active" : "pill"
-                    }
-                    onClick={() => setPaidBy(member.id)}
-                  >
-                    {member.name}
+      {groupSection === "members" ? (
+        <>
+          <section className="card">
+            <div className="section-heading">
+              <Icon name="users" />
+              <h2>Add members</h2>
+            </div>
+            <input
+              value={memberName}
+              onChange={(event) => setMemberName(event.target.value)}
+              placeholder="Friend name"
+            />
+            <button className="primary" onClick={addMember}>
+              Add member
+            </button>
+          </section>
+
+          <section>
+            <div className="section-heading">
+              <Icon name="list" />
+              <h2>Member totals</h2>
+            </div>
+            {activeGroup.members.length === 0 ? (
+              <p className="muted">No members yet.</p>
+            ) : (
+              activeGroup.members.map((member) => (
+                <div className="row" key={member.id}>
+                  <span>{member.name}</span>
+                  <strong>{formatCurrencyValue(memberPaidById[member.id] || 0, baseCurrency)}</strong>
+                </div>
+              ))
+            )}
+          </section>
+        </>
+      ) : null}
+
+      {groupSection === "add-expense" ? (
+        <section>
+          <div className="section-heading">
+            <Icon name="receipt" />
+            <h2>{editingExpenseId ? "Edit expense" : "New expense"}</h2>
+          </div>
+          {activeGroup.members.length === 0 ? (
+            <div className="card">
+              <p className="muted">Add members before logging expenses.</p>
+              <button className="pill" onClick={() => setGroupSection("members")}>
+                <Icon name="users" /> Add members
+              </button>
+            </div>
+          ) : (
+            <div className="card">
+              {editingExpenseId && (
+                <div className="edit-banner">
+                  <span>Editing expense</span>
+                  <button className="pill" onClick={resetExpenseForm}>
+                    Cancel
                   </button>
-                ))}
-              </div>
-            </div>
+                </div>
+              )}
+              <input
+                value={expenseTitle}
+                onChange={(event) => setExpenseTitle(event.target.value)}
+                placeholder="Expense title"
+              />
+              <input
+                value={expenseAmount}
+                onChange={(event) => setExpenseAmount(event.target.value)}
+                placeholder="$0.00"
+                inputMode="decimal"
+              />
 
-            <div className="field">
-              <span>Split between</span>
-              <div className="pill-row">
-                {activeGroup.members.map((member) => {
-                  const active = splitBetween.includes(member.id);
-                  return (
+              <div className="field">
+                <span>Currency</span>
+                <div className="select-row">
+                  <select
+                    value={expenseCurrency}
+                    onChange={(event) => setExpenseCurrency(event.target.value)}
+                  >
+                    {currencyOptions.map((option) => (
+                      <option key={option.code} value={option.code}>
+                        {option.code} · {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  {expenseCurrency !== baseCurrency && (
+                    <input
+                      value={expenseFxRate}
+                      onChange={(event) => setExpenseFxRate(event.target.value)}
+                      placeholder={`Rate to ${baseCurrency}`}
+                      inputMode="decimal"
+                    />
+                  )}
+                </div>
+                <div className="help-text">
+                  Base currency: {baseCurrency}.{" "}
+                  {expenseCurrency === baseCurrency
+                    ? "No conversion needed."
+                    : fxRateValid
+                      ? `Converted total: ${formatCurrencyValue(
+                          expenseBaseAmount,
+                          baseCurrency
+                        )}`
+                      : "Enter a valid exchange rate."}
+                </div>
+              </div>
+
+              <div className="field">
+                <span>Paid by</span>
+                <div className="pill-row">
+                  {activeGroup.members.map((member) => (
                     <button
                       key={member.id}
-                      className={active ? "pill active" : "pill"}
-                      onClick={() => {
-                        setSplitBetween((prev) =>
-                          prev.includes(member.id)
-                            ? prev.filter((id) => id !== member.id)
-                            : [...prev, member.id]
-                        );
-                      }}
+                      className={paidBy === member.id ? "pill active" : "pill"}
+                      onClick={() => setPaidBy(member.id)}
                     >
                       {member.name}
                     </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="field">
-              <span>Split mode</span>
-              <div className="pill-row">
-                <button
-                  className={splitMode === "equal" ? "pill active" : "pill"}
-                  onClick={() => setSplitMode("equal")}
-                >
-                  Equal
-                </button>
-                <button
-                  className={splitMode === "custom" ? "pill active" : "pill"}
-                  onClick={() => {
-                    setSplitMode("custom");
-                    setCustomSplitAmounts((prev) => {
-                      const hasAny = splitBetween.some(
-                        (memberId) => (prev[memberId] || "").trim().length > 0
-                      );
-                      if (hasAny) {
-                        const next: Record<string, string> = {};
-                        splitBetween.forEach((memberId) => {
-                          next[memberId] = prev[memberId] ?? "";
-                        });
-                        return next;
-                      }
-                      return buildEqualCustomAmounts(
-                        splitBetween,
-                        expenseBaseAmount
-                      );
-                    });
-                  }}
-                >
-                  Custom
-                </button>
-              </div>
-            </div>
-
-            {splitMode === "custom" && (
-              <div className="custom-card">
-                {splitBetween.length === 0 ? (
-                  <p className="warning">Select at least one person to split.</p>
-                ) : (
-                  splitBetween.map((memberId) => {
-                    const member = activeGroup.members.find(
-                      (item) => item.id === memberId
-                    );
-                    return (
-                      <div className="split-row" key={memberId}>
-                        <span>{member?.name || "Member"}</span>
-                        <input
-                          value={customSplitAmounts[memberId] || ""}
-                          onChange={(event) =>
-                            setCustomSplitAmounts((prev) => ({
-                              ...prev,
-                              [memberId]: event.target.value
-                            }))
-                          }
-                          placeholder="$0.00"
-                          inputMode="decimal"
-                        />
-                      </div>
-                    );
-                  })
-                )}
-                <div className="split-total">
-                  <span>Custom total</span>
-                  <strong>
-                    {formatCurrencyValue(customTotal, baseCurrency)} /{" "}
-                    {formatCurrencyValue(expenseBaseAmount, baseCurrency)}
-                  </strong>
+                  ))}
                 </div>
-                {!fxRateValid ? (
-                  <p className="warning">
-                    Enter a valid exchange rate to continue.
-                  </p>
-                ) : expenseBaseAmount <= 0 ? (
-                  <p className="warning">
-                    Enter the expense total to validate the custom split.
-                  </p>
-                ) : !customTotalMatches ? (
-                  <p className="warning">
-                    Custom split must match the total in {baseCurrency}.
-                  </p>
-                ) : null}
               </div>
-            )}
 
+              <div className="field">
+                <span>Split between</span>
+                <div className="pill-row">
+                  {activeGroup.members.map((member) => {
+                    const active = splitBetween.includes(member.id);
+                    return (
+                      <button
+                        key={member.id}
+                        className={active ? "pill active" : "pill"}
+                        onClick={() => {
+                          setSplitBetween((prev) =>
+                            prev.includes(member.id)
+                              ? prev.filter((id) => id !== member.id)
+                              : [...prev, member.id]
+                          );
+                        }}
+                      >
+                        {member.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="field">
+                <span>Split mode</span>
+                <div className="pill-row">
+                  <button
+                    className={splitMode === "equal" ? "pill active" : "pill"}
+                    onClick={() => setSplitMode("equal")}
+                  >
+                    Equal
+                  </button>
+                  <button
+                    className={splitMode === "custom" ? "pill active" : "pill"}
+                    onClick={() => {
+                      setSplitMode("custom");
+                      setCustomSplitAmounts((prev) => {
+                        const hasAny = splitBetween.some(
+                          (memberId) => (prev[memberId] || "").trim().length > 0
+                        );
+                        if (hasAny) {
+                          const next: Record<string, string> = {};
+                          splitBetween.forEach((memberId) => {
+                            next[memberId] = prev[memberId] ?? "";
+                          });
+                          return next;
+                        }
+                        return buildEqualCustomAmounts(
+                          splitBetween,
+                          expenseBaseAmount
+                        );
+                      });
+                    }}
+                  >
+                    Custom
+                  </button>
+                </div>
+              </div>
+
+              {splitMode === "custom" && (
+                <div className="custom-card">
+                  {splitBetween.length === 0 ? (
+                    <p className="warning">Select at least one person to split.</p>
+                  ) : (
+                    splitBetween.map((memberId) => {
+                      const member = activeGroup.members.find(
+                        (item) => item.id === memberId
+                      );
+                      return (
+                        <div className="split-row" key={memberId}>
+                          <span>{member?.name || "Member"}</span>
+                          <input
+                            value={customSplitAmounts[memberId] || ""}
+                            onChange={(event) =>
+                              setCustomSplitAmounts((prev) => ({
+                                ...prev,
+                                [memberId]: event.target.value
+                              }))
+                            }
+                            placeholder="$0.00"
+                            inputMode="decimal"
+                          />
+                        </div>
+                      );
+                    })
+                  )}
+                  <div className="split-total">
+                    <span>Custom total</span>
+                    <strong>
+                      {formatCurrencyValue(customTotal, baseCurrency)} /{" "}
+                      {formatCurrencyValue(expenseBaseAmount, baseCurrency)}
+                    </strong>
+                  </div>
+                  {!fxRateValid ? (
+                    <p className="warning">
+                      Enter a valid exchange rate to continue.
+                    </p>
+                  ) : expenseBaseAmount <= 0 ? (
+                    <p className="warning">
+                      Enter the expense total to validate the custom split.
+                    </p>
+                  ) : !customTotalMatches ? (
+                    <p className="warning">
+                      Custom split must match the total in {baseCurrency}.
+                    </p>
+                  ) : null}
+                </div>
+              )}
+
+              <button
+                className={canSubmitExpense ? "primary" : "primary disabled"}
+                onClick={() =>
+                  editingExpenseId
+                    ? saveExpenseEdits(
+                        paidBy,
+                        splitBetween,
+                        splitMode,
+                        customSplitAmounts
+                      )
+                    : addExpense(
+                        paidBy,
+                        splitBetween,
+                        splitMode,
+                        customSplitAmounts
+                      )
+                }
+                disabled={!canSubmitExpense}
+              >
+                {editingExpenseId ? "Save changes" : "Add expense"}
+              </button>
+            </div>
+          )}
+        </section>
+      ) : null}
+
+      {groupSection === "expenses" ? (
+        <section>
+          <div className="section-heading">
+            <Icon name="list" />
+            <h2>Expenses</h2>
+          </div>
+          <div className="select-row">
             <button
-              className={canSubmitExpense ? "primary" : "primary disabled"}
-              onClick={() =>
-                editingExpenseId
-                  ? saveExpenseEdits(
-                      paidBy,
-                      splitBetween,
-                      splitMode,
-                      customSplitAmounts
-                    )
-                  : addExpense(
-                      paidBy,
-                      splitBetween,
-                      splitMode,
-                      customSplitAmounts
-                    )
-              }
-              disabled={!canSubmitExpense}
+              className="pill"
+              onClick={() => {
+                resetExpenseForm();
+                setGroupSection("add-expense");
+              }}
             >
-              {editingExpenseId ? "Save changes" : "Add expense"}
+              <Icon name="plus" /> New expense
             </button>
           </div>
-        )}
-      </section>
+          {activeGroup.expenses.length === 0 ? (
+            <p className="muted">No expenses yet.</p>
+          ) : (
+            activeGroup.expenses.map((expense) => (
+              <div className="row card" key={expense.id}>
+                <div>
+                  <div className="row-title">{expense.title}</div>
+                  <div className="row-meta">
+                    Paid by{" "}
+                    {activeGroup.members.find((m) => m.id === expense.paidBy)?.name ||
+                      ""}
+                    {" · "}
+                    {expense.splitMode === "custom"
+                      ? "Custom split"
+                      : `Split ${expense.splitBetween?.length || 0} ways`}
+                    {" · "}
+                    {(expense.currency || baseCurrency).toUpperCase()}
+                  </div>
+                </div>
+                <div className="expense-actions">
+                  <strong>{formatCurrencyValue(expense.amount, baseCurrency)}</strong>
+                  {expense.currency &&
+                  expense.currency !== baseCurrency &&
+                  expense.originalAmount ? (
+                    <span className="expense-sub">
+                      {formatCurrencyValue(expense.originalAmount, expense.currency)}
+                    </span>
+                  ) : null}
+                  <div className="action-row">
+                    <button
+                      className="pill"
+                      onClick={() => startEditExpense(activeGroup.id, expense.id)}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="pill danger"
+                      onClick={() =>
+                        confirmDeleteExpense(activeGroup.id, expense.id)
+                      }
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </section>
+      ) : null}
 
-      <section>
-        <div className="section-heading">
-          <Icon name="list" />
-          <h2>Expenses</h2>
-        </div>
-        {activeGroup.expenses.length === 0 ? (
-          <p className="muted">No expenses yet.</p>
-        ) : (
-          activeGroup.expenses.map((expense) => (
-            <div className="row card" key={expense.id}>
-              <div>
-                <div className="row-title">{expense.title}</div>
-                <div className="row-meta">
-                  Paid by{" "}
-                  {activeGroup.members.find((m) => m.id === expense.paidBy)?.name ||
-                    ""}
-                  {" · "}
-                  {expense.splitMode === "custom"
-                    ? "Custom split"
-                    : `Split ${expense.splitBetween?.length || 0} ways`}
-                  {" · "}
-                  {(expense.currency || baseCurrency).toUpperCase()}
-                </div>
-              </div>
-              <div className="expense-actions">
-                <strong>{formatCurrencyValue(expense.amount, baseCurrency)}</strong>
-                {expense.currency &&
-                expense.currency !== baseCurrency &&
-                expense.originalAmount ? (
-                  <span className="expense-sub">
-                    {formatCurrencyValue(expense.originalAmount, expense.currency)}
-                  </span>
-                ) : null}
-                <div className="action-row">
-                  <button
-                    className="pill"
-                    onClick={() => startEditExpense(activeGroup.id, expense.id)}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    className="pill danger"
-                    onClick={() =>
-                      confirmDeleteExpense(activeGroup.id, expense.id)
-                    }
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
+      {groupSection === "settings" ? (
+        <section className="card">
+          <div className="section-heading">
+            <Icon name="settings" />
+            <h2>Group settings</h2>
+          </div>
+          <div className="field">
+            <span>Base currency</span>
+            <div className="select-row">
+              <select
+                value={groupCurrencyDraft}
+                onChange={(event) => setGroupCurrencyDraft(event.target.value)}
+              >
+                {currencyOptions.map((option) => (
+                  <option key={option.code} value={option.code}>
+                    {option.code} · {option.label}
+                  </option>
+                ))}
+              </select>
+              <button className="pill" onClick={saveGroupSettings}>
+                Save
+              </button>
             </div>
-          ))
-        )}
-      </section>
+            <div className="help-text">
+              Changing the base currency will not convert past expenses.
+            </div>
+          </div>
+          <div className="field">
+            <span>Invite code</span>
+            <div className="select-row">
+              <input value={activeGroup.inviteCode} readOnly />
+              <button className="pill" onClick={handleCopyInvite}>
+                Copy
+              </button>
+            </div>
+            {copyMessage ? <div className="help-text">{copyMessage}</div> : null}
+          </div>
+          <div className="field">
+            <span>Export</span>
+            <div className="select-row">
+              <button className="pill" onClick={exportGroupCsv}>
+                <Icon name="download" /> CSV
+              </button>
+              <button className="pill" onClick={handlePrint}>
+                <Icon name="printer" /> Print/PDF
+              </button>
+            </div>
+          </div>
+        </section>
+      ) : null}
       {renderBottomNav()}
     </div>
   );

@@ -312,6 +312,47 @@ h2 {
   color: #ffffff;
 }
 
+.group-section-nav {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface-overlay);
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(10px);
+  position: sticky;
+  top: calc(88px + env(safe-area-inset-top));
+  z-index: 15;
+}
+
+.group-section-nav button {
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  min-height: 52px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.group-section-nav button svg {
+  width: 18px;
+  height: 18px;
+}
+
+.group-section-nav button.active {
+  border-color: var(--border);
+  color: var(--ink);
+  background: var(--surface-soft);
+}
+
 .cloud-status {
   align-self: flex-start;
   display: inline-flex;
@@ -766,6 +807,26 @@ button:active {
     padding: 7px 8px;
   }
 
+  .group-section-nav {
+    display: flex;
+    overflow-x: auto;
+    gap: 6px;
+    top: calc(126px + env(safe-area-inset-top));
+    padding: 6px;
+    scrollbar-width: none;
+  }
+
+  .group-section-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .group-section-nav button {
+    min-width: 82px;
+    min-height: 48px;
+    padding: 6px 8px;
+    flex-shrink: 0;
+  }
+
   .theme-label {
     display: none;
   }
@@ -847,6 +908,7 @@ button:active {
 
   .no-print,
   .bottom-nav,
+  .group-section-nav,
   button,
   .link,
   input,
