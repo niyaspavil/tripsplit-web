@@ -143,7 +143,8 @@ const Icon = ({
     | "home"
     | "plus"
     | "download"
-    | "printer";
+    | "printer"
+    | "calendar";
   className?: string;
 }) => {
   const shared = {
@@ -295,6 +296,21 @@ const Icon = ({
           <rect x="4" y="8" width="16" height="8" rx="2" />
         </svg>
       );
+    case "calendar":
+      return (
+        <svg {...shared}>
+          <rect x="4" y="5" width="16" height="16" rx="2" />
+          <path d="M8 3v4" />
+          <path d="M16 3v4" />
+          <path d="M4 9h16" />
+          <path d="M8 13h.01" />
+          <path d="M12 13h.01" />
+          <path d="M16 13h.01" />
+          <path d="M8 17h.01" />
+          <path d="M12 17h.01" />
+          <path d="M16 17h.01" />
+        </svg>
+      );
     default:
       return null;
   }
@@ -328,6 +344,26 @@ const todayLocalDateString = () => {
   const mm = String(now.getMonth() + 1).padStart(2, "0");
   const dd = String(now.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
+};
+
+const ymdToDate = (value: string) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const [y, m, d] = value.split("-").map((part) => Number(part));
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d);
+};
+
+const dateToYmd = (date: Date) => {
+  const yyyy = String(date.getFullYear());
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+const addMonths = (date: Date, delta: number) => {
+  const copy = new Date(date);
+  copy.setMonth(copy.getMonth() + delta);
+  return copy;
 };
 
 const normalizeTitle = (value: string) =>
@@ -569,6 +605,137 @@ const computeSettlements = (
   return settlements;
 };
 
+const CalendarPicker = ({
+  value,
+  onChange,
+  onClose
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  onClose: () => void;
+}) => {
+  const initial =
+    ymdToDate(value) || ymdToDate(todayLocalDateString()) || new Date();
+  const [cursor, setCursor] = useState(() => new Date(initial.getFullYear(), initial.getMonth(), 1));
+
+  useEffect(() => {
+    const next = ymdToDate(value);
+    if (!next) return;
+    setCursor(new Date(next.getFullYear(), next.getMonth(), 1));
+  }, [value]);
+
+  const selected = ymdToDate(value);
+  const year = cursor.getFullYear();
+  const month = cursor.getMonth();
+  const monthLabel = new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    year: "numeric"
+  }).format(cursor);
+
+  const firstDay = new Date(year, month, 1);
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const startOffset = firstDay.getDay(); // 0..6 (Sun..Sat)
+
+  const cells: Array<{ key: string; date: Date | null }> = [];
+  for (let i = 0; i < 42; i += 1) {
+    const dayNum = i - startOffset + 1;
+    if (dayNum < 1 || dayNum > daysInMonth) {
+      cells.push({ key: `empty-${i}`, date: null });
+    } else {
+      cells.push({ key: `day-${dayNum}`, date: new Date(year, month, dayNum) });
+    }
+  }
+
+  const weekLabels = ["S", "M", "T", "W", "T", "F", "S"];
+
+  return (
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onClick={() => onClose()}
+    >
+      <div
+        className="modal-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Choose date"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="modal-header">
+          <button
+            type="button"
+            className="pill"
+            onClick={() => setCursor((prev) => addMonths(prev, -1))}
+          >
+            Prev
+          </button>
+          <div className="modal-title">
+            <Icon name="calendar" /> {monthLabel}
+          </div>
+          <button
+            type="button"
+            className="pill"
+            onClick={() => setCursor((prev) => addMonths(prev, 1))}
+          >
+            Next
+          </button>
+        </div>
+
+        <div className="calendar-grid">
+          {weekLabels.map((label) => (
+            <div key={label} className="calendar-dow">
+              {label}
+            </div>
+          ))}
+          {cells.map((cell) => {
+            if (!cell.date) {
+              return <div key={cell.key} className="calendar-cell empty" />;
+            }
+            const ymd = dateToYmd(cell.date);
+            const isSelected = selected ? dateToYmd(selected) === ymd : false;
+            const isToday = todayLocalDateString() === ymd;
+            return (
+              <button
+                type="button"
+                key={cell.key}
+                className={
+                  isSelected
+                    ? "calendar-cell selected"
+                    : isToday
+                      ? "calendar-cell today"
+                      : "calendar-cell"
+                }
+                onClick={() => {
+                  onChange(ymd);
+                  onClose();
+                }}
+              >
+                {cell.date.getDate()}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="modal-actions">
+          <button
+            type="button"
+            className="pill"
+            onClick={() => {
+              onChange(todayLocalDateString());
+              onClose();
+            }}
+          >
+            Today
+          </button>
+          <button type="button" className="primary" onClick={onClose}>
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
   const [themePreset, setThemePreset] = useState<ThemePreset>(() => {
     if (typeof window === "undefined") return DEFAULT_THEME;
@@ -614,6 +781,7 @@ export default function App() {
     Record<string, string>
   >({});
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
 
   const activeGroup = useMemo(() => {
     return state.groups.find((group) => group.id === state.activeGroupId) || null;
@@ -2315,11 +2483,14 @@ export default function App() {
               ) : null}
               <div className="field">
                 <span>Date</span>
-                <input
-                  type="date"
-                  value={expenseDate}
-                  onChange={(event) => setExpenseDate(event.target.value)}
-                />
+                <button
+                  type="button"
+                  className="date-trigger"
+                  onClick={() => setDatePickerOpen(true)}
+                >
+                  <Icon name="calendar" />
+                  <span>{formatSpentOnLabel(expenseDate)}</span>
+                </button>
               </div>
               <input
                 value={expenseAmount}
@@ -2327,6 +2498,13 @@ export default function App() {
                 placeholder="$0.00"
                 inputMode="decimal"
               />
+              {datePickerOpen ? (
+                <CalendarPicker
+                  value={expenseDate}
+                  onChange={setExpenseDate}
+                  onClose={() => setDatePickerOpen(false)}
+                />
+              ) : null}
 
               <div className="field">
                 <span>Currency</span>
