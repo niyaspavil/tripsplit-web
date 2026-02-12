@@ -40,7 +40,15 @@ type Expense = {
   splitBetween: string[];
   splitMode?: "equal" | "custom";
   splitAmounts?: Record<string, number>;
+  spentOn?: string; // YYYY-MM-DD (local date)
   createdAt: string;
+};
+
+type ExpenseMaster = {
+  id: string;
+  title: string;
+  createdAt: string;
+  lastUsedAt: string;
 };
 
 type Group = {
@@ -52,6 +60,7 @@ type Group = {
   collaborators: string[];
   members: Member[];
   expenses: Expense[];
+  expenseMasters: ExpenseMaster[];
 };
 
 type AppState = {
@@ -313,6 +322,29 @@ const formatMoney = (value: number) => {
   return rounded.toFixed(2);
 };
 
+const todayLocalDateString = () => {
+  const now = new Date();
+  const yyyy = String(now.getFullYear());
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+const normalizeTitle = (value: string) =>
+  value.trim().replace(/\s+/g, " ");
+
+const formatSpentOnLabel = (value: string) => {
+  if (!value) return "";
+  // Prefer local-friendly date formatting when possible.
+  const parsed = new Date(value.length === 10 ? `${value}T00:00:00` : value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "2-digit",
+    year: "numeric"
+  }).format(parsed);
+};
+
 const formatCurrencyValue = (value: number, currency: string) => {
   try {
     return new Intl.NumberFormat("en-US", {
@@ -384,17 +416,19 @@ const buildExpensePayload = (params: {
   splitBetween: string[];
   splitMode: "equal" | "custom";
   splitAmounts?: Record<string, number>;
+  spentOn: string;
   createdAt: string;
 }): Expense => {
   const payload: Expense = {
     id: params.id,
-    title: params.title,
+    title: normalizeTitle(params.title),
     amount: params.amount,
     currency: params.currency,
     originalAmount: params.originalAmount,
     paidBy: params.paidBy,
     splitBetween: params.splitBetween,
     splitMode: params.splitMode,
+    spentOn: params.spentOn,
     createdAt: params.createdAt
   };
 
@@ -411,6 +445,39 @@ const buildExpensePayload = (params: {
   }
 
   return payload;
+};
+
+const upsertExpenseMaster = (
+  masters: ExpenseMaster[],
+  title: string
+): ExpenseMaster[] => {
+  const normalized = normalizeTitle(title);
+  if (!normalized) return masters;
+  const now = new Date().toISOString();
+  const matchIndex = masters.findIndex(
+    (item) => item.title.trim().toLowerCase() === normalized.toLowerCase()
+  );
+
+  const next = [...masters];
+  if (matchIndex >= 0) {
+    next[matchIndex] = {
+      ...next[matchIndex],
+      title: normalized,
+      lastUsedAt: now
+    };
+  } else {
+    next.unshift({
+      id: createId(),
+      title: normalized,
+      createdAt: now,
+      lastUsedAt: now
+    });
+  }
+
+  next.sort(
+    (a, b) => new Date(b.lastUsedAt).getTime() - new Date(a.lastUsedAt).getTime()
+  );
+  return next.slice(0, 60);
 };
 
 const computeBalances = (group: Group) => {
@@ -537,6 +604,7 @@ export default function App() {
   const [memberName, setMemberName] = useState("");
   const [expenseTitle, setExpenseTitle] = useState("");
   const [expenseAmount, setExpenseAmount] = useState("");
+  const [expenseDate, setExpenseDate] = useState(todayLocalDateString());
   const [expenseCurrency, setExpenseCurrency] = useState("USD");
   const [expenseFxRate, setExpenseFxRate] = useState("1");
   const [paidBy, setPaidBy] = useState("");
@@ -601,6 +669,7 @@ export default function App() {
           name: group.name,
           members: group.members || [],
           expenses: group.expenses || [],
+          expenseMasters: [],
           currency: group.currency || "USD",
           inviteCode: createInviteCode(),
           ownerId: authUser.uid,
@@ -653,6 +722,7 @@ export default function App() {
             name: data.name || "Untitled trip",
             members: data.members || [],
             expenses: data.expenses || [],
+            expenseMasters: data.expenseMasters || [],
             currency: data.currency || "USD",
             inviteCode: data.inviteCode || "",
             ownerId: data.ownerId || "",
@@ -699,6 +769,7 @@ export default function App() {
         name: trimmed,
         members: [],
         expenses: [],
+        expenseMasters: [],
         currency: groupCurrencyDraft || "USD",
         inviteCode: createInviteCode(),
         ownerId: authUser.uid,
@@ -781,6 +852,7 @@ export default function App() {
     setEditingExpenseId(null);
     setExpenseTitle("");
     setExpenseAmount("");
+    setExpenseDate(todayLocalDateString());
     setSplitMode("equal");
     setCustomSplitAmounts({});
     if (activeGroup) {
@@ -802,6 +874,8 @@ export default function App() {
       const title = expenseTitle.trim();
       const originalAmount = parseAmount(expenseAmount);
       if (!title || Number.isNaN(originalAmount) || originalAmount <= 0) return;
+      const spentOn = expenseDate.trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(spentOn)) return;
       const fxRate =
         expenseCurrency === baseCurrency ? 1 : parseAmount(expenseFxRate);
       if (!fxRate || fxRate <= 0) return;
@@ -834,13 +908,19 @@ export default function App() {
         splitBetween: fallbackSplit,
         splitMode: nextSplitMode,
         splitAmounts,
+        spentOn,
         createdAt: new Date().toISOString()
       });
 
       const nextExpenses = [newExpense, ...activeGroup.expenses];
+      const nextMasters = upsertExpenseMaster(
+        activeGroup.expenseMasters || [],
+        title
+      );
       try {
         await updateDoc(doc(db, "groups", activeGroup.id), {
           expenses: nextExpenses,
+          expenseMasters: nextMasters,
           updatedAt: serverTimestamp()
         });
         resetExpenseForm();
@@ -857,6 +937,7 @@ export default function App() {
       activeGroup,
       expenseTitle,
       expenseAmount,
+      expenseDate,
       expenseCurrency,
       expenseFxRate,
       baseCurrency,
@@ -875,6 +956,8 @@ export default function App() {
       const title = expenseTitle.trim();
       const originalAmount = parseAmount(expenseAmount);
       if (!title || Number.isNaN(originalAmount) || originalAmount <= 0) return;
+      const spentOn = expenseDate.trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(spentOn)) return;
       const fxRate =
         expenseCurrency === baseCurrency ? 1 : parseAmount(expenseFxRate);
       if (!fxRate || fxRate <= 0) return;
@@ -909,14 +992,20 @@ export default function App() {
               splitBetween: fallbackSplit,
               splitMode: nextSplitMode,
               splitAmounts,
+              spentOn,
               createdAt: expense.createdAt
             })
           : expense
       );
 
+      const nextMasters = upsertExpenseMaster(
+        activeGroup.expenseMasters || [],
+        title
+      );
       try {
         await updateDoc(doc(db, "groups", activeGroup.id), {
           expenses: nextExpenses,
+          expenseMasters: nextMasters,
           updatedAt: serverTimestamp()
         });
         resetExpenseForm();
@@ -934,6 +1023,7 @@ export default function App() {
       editingExpenseId,
       expenseTitle,
       expenseAmount,
+      expenseDate,
       expenseCurrency,
       expenseFxRate,
       baseCurrency,
@@ -963,6 +1053,10 @@ export default function App() {
       const displayAmount =
         expense.originalAmount ?? expense.amount ?? 0;
       setExpenseAmount(formatMoney(displayAmount));
+      setExpenseDate(
+        expense.spentOn ||
+          (expense.createdAt ? expense.createdAt.slice(0, 10) : todayLocalDateString())
+      );
       setExpenseCurrency(expenseCurrencyValue);
       setExpenseFxRate(
         expense.fxRate ? String(expense.fxRate) : "1"
@@ -1019,6 +1113,7 @@ export default function App() {
     setCustomSplitAmounts({});
     setExpenseCurrency(activeGroup.currency || "USD");
     setExpenseFxRate("1");
+    setExpenseDate(todayLocalDateString());
   }, [activeGroup, editingExpenseId]);
 
   useEffect(() => {
@@ -1080,13 +1175,26 @@ export default function App() {
     Math.abs(roundToCents(customTotal) - roundToCents(expenseBaseAmount)) <=
       0.01;
 
+  const spentOnValid = /^\d{4}-\d{2}-\d{2}$/.test(expenseDate.trim());
+
   const canSubmitExpense =
     expenseTitle.trim().length > 0 &&
     expenseAmountNumber > 0 &&
+    spentOnValid &&
     fxRateValid &&
     paidBy.length > 0 &&
     (splitMode === "equal" ||
       (splitBetween.length > 0 && customTotalMatches));
+
+  const expenseMasterSuggestions = useMemo(() => {
+    if (!activeGroup?.expenseMasters) return [];
+    return [...activeGroup.expenseMasters]
+      .sort(
+        (a, b) =>
+          new Date(b.lastUsedAt).getTime() - new Date(a.lastUsedAt).getTime()
+      )
+      .slice(0, 10);
+  }, [activeGroup]);
 
   const allExpenses = useMemo<MasterExpense[]>(() => {
     return state.groups.flatMap((group) =>
@@ -1304,7 +1412,7 @@ export default function App() {
     activeGroup.expenses.forEach((expense) => {
       rows.push([
         activeGroup.name,
-        expense.createdAt,
+        expense.spentOn || expense.createdAt,
         expense.title,
         formatMoney(expense.amount),
         activeGroup.currency,
@@ -1343,7 +1451,7 @@ export default function App() {
       const members = memberNameByGroup[expense.groupId] || {};
       rows.push([
         expense.groupName,
-        expense.createdAt,
+        expense.spentOn || expense.createdAt,
         expense.title,
         formatMoney(expense.amount),
         expense.groupCurrency,
@@ -1635,7 +1743,9 @@ export default function App() {
                   <div>
                     <div className="row-title">{expense.title}</div>
                     <div className="row-meta">
-                      {expense.groupName} · Paid by{" "}
+                      {expense.groupName} ·{" "}
+                      {formatSpentOnLabel(expense.spentOn || expense.createdAt)} ·
+                      {" "}Paid by{" "}
                       {memberNameByGroup[expense.groupId]?.[expense.paidBy] ||
                         "Unknown"}
                       {" · "}
@@ -2179,7 +2289,38 @@ export default function App() {
                 value={expenseTitle}
                 onChange={(event) => setExpenseTitle(event.target.value)}
                 placeholder="Expense title"
+                list="expense-master-list"
               />
+              <datalist id="expense-master-list">
+                {expenseMasterSuggestions.map((item) => (
+                  <option key={item.id} value={item.title} />
+                ))}
+              </datalist>
+              {expenseMasterSuggestions.length > 0 ? (
+                <div className="field">
+                  <span className="help-text">Quick pick</span>
+                  <div className="pill-row">
+                    {expenseMasterSuggestions.map((item) => (
+                      <button
+                        type="button"
+                        key={item.id}
+                        className="pill"
+                        onClick={() => setExpenseTitle(item.title)}
+                      >
+                        <Icon name="receipt" /> {item.title}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              <div className="field">
+                <span>Date</span>
+                <input
+                  type="date"
+                  value={expenseDate}
+                  onChange={(event) => setExpenseDate(event.target.value)}
+                />
+              </div>
               <input
                 value={expenseAmount}
                 onChange={(event) => setExpenseAmount(event.target.value)}
@@ -2407,7 +2548,8 @@ export default function App() {
                 <div>
                   <div className="row-title">{expense.title}</div>
                   <div className="row-meta">
-                    Paid by{" "}
+                    {formatSpentOnLabel(expense.spentOn || expense.createdAt)} ·
+                    {" "}Paid by{" "}
                     {activeGroup.members.find((m) => m.id === expense.paidBy)?.name ||
                       ""}
                     {" · "}
