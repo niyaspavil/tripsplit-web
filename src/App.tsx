@@ -33,6 +33,7 @@ type Expense = {
   id: string;
   title: string;
   amount: number;
+  category?: string;
   currency?: string;
   originalAmount?: number;
   fxRate?: number;
@@ -47,6 +48,7 @@ type Expense = {
 type ExpenseMaster = {
   id: string;
   title: string;
+  category?: string;
   createdAt: string;
   lastUsedAt: string;
 };
@@ -86,7 +88,13 @@ type MasterExpense = Expense & {
 };
 
 type ThemePreset = "postcard" | "metro" | "sunset";
-type GroupSection = "overview" | "members" | "add-expense" | "expenses" | "settings";
+type GroupSection =
+  | "overview"
+  | "members"
+  | "add-expense"
+  | "expenses"
+  | "summary"
+  | "settings";
 type GroupsHomeSection = "my-groups" | "create" | "join" | "dashboard";
 
 const createId = () =>
@@ -118,6 +126,18 @@ const currencyOptions = [
   { code: "AUD", label: "Australian Dollar", symbol: "$" },
   { code: "CAD", label: "Canadian Dollar", symbol: "$" }
 ];
+
+const categoryOptions = [
+  "Food",
+  "Transport",
+  "Stay",
+  "Activities",
+  "Shopping",
+  "Bills",
+  "Other"
+] as const;
+
+const DEFAULT_CATEGORY: (typeof categoryOptions)[number] = "Other";
 
 const getCurrencySymbol = (code: string) => {
   return currencyOptions.find((option) => option.code === code)?.symbol || "$";
@@ -445,6 +465,7 @@ const buildExpensePayload = (params: {
   id: string;
   title: string;
   amount: number;
+  category: string;
   currency: string;
   originalAmount: number;
   fxRate: number;
@@ -459,6 +480,7 @@ const buildExpensePayload = (params: {
     id: params.id,
     title: normalizeTitle(params.title),
     amount: params.amount,
+    category: params.category,
     currency: params.currency,
     originalAmount: params.originalAmount,
     paidBy: params.paidBy,
@@ -485,7 +507,8 @@ const buildExpensePayload = (params: {
 
 const upsertExpenseMaster = (
   masters: ExpenseMaster[],
-  title: string
+  title: string,
+  category: string
 ): ExpenseMaster[] => {
   const normalized = normalizeTitle(title);
   if (!normalized) return masters;
@@ -499,12 +522,14 @@ const upsertExpenseMaster = (
     next[matchIndex] = {
       ...next[matchIndex],
       title: normalized,
+      category,
       lastUsedAt: now
     };
   } else {
     next.unshift({
       id: createId(),
       title: normalized,
+      category,
       createdAt: now,
       lastUsedAt: now
     });
@@ -761,6 +786,7 @@ export default function App() {
   const [groupsHomeSection, setGroupsHomeSection] = useState<GroupsHomeSection>("my-groups");
   const [viewInitialized, setViewInitialized] = useState(false);
   const [groupsLoaded, setGroupsLoaded] = useState(false);
+  const [masterExportGroupId, setMasterExportGroupId] = useState<string>("");
   const [joinCode, setJoinCode] = useState("");
   const [joinError, setJoinError] = useState("");
   const [copyMessage, setCopyMessage] = useState("");
@@ -772,6 +798,7 @@ export default function App() {
   const [expenseTitle, setExpenseTitle] = useState("");
   const [expenseAmount, setExpenseAmount] = useState("");
   const [expenseDate, setExpenseDate] = useState(todayLocalDateString());
+  const [expenseCategory, setExpenseCategory] = useState<string>(DEFAULT_CATEGORY);
   const [expenseCurrency, setExpenseCurrency] = useState("USD");
   const [expenseFxRate, setExpenseFxRate] = useState("1");
   const [paidBy, setPaidBy] = useState("");
@@ -928,6 +955,12 @@ export default function App() {
     setViewInitialized(true);
   }, [hydrated, viewInitialized, state.activeGroupId]);
 
+  useEffect(() => {
+    if (masterExportGroupId) return;
+    if (state.groups.length === 0) return;
+    setMasterExportGroupId(state.groups[0].id);
+  }, [masterExportGroupId, state.groups]);
+
   const addGroup = useCallback(async () => {
     if (!authUser) return;
     const trimmed = groupName.trim();
@@ -1021,6 +1054,7 @@ export default function App() {
     setExpenseTitle("");
     setExpenseAmount("");
     setExpenseDate(todayLocalDateString());
+    setExpenseCategory(DEFAULT_CATEGORY);
     setSplitMode("equal");
     setCustomSplitAmounts({});
     if (activeGroup) {
@@ -1044,6 +1078,7 @@ export default function App() {
       if (!title || Number.isNaN(originalAmount) || originalAmount <= 0) return;
       const spentOn = expenseDate.trim();
       if (!/^\d{4}-\d{2}-\d{2}$/.test(spentOn)) return;
+      const category = (expenseCategory || DEFAULT_CATEGORY).trim() || DEFAULT_CATEGORY;
       const fxRate =
         expenseCurrency === baseCurrency ? 1 : parseAmount(expenseFxRate);
       if (!fxRate || fxRate <= 0) return;
@@ -1069,6 +1104,7 @@ export default function App() {
         id: createId(),
         title,
         amount,
+        category,
         currency: expenseCurrency,
         originalAmount,
         fxRate,
@@ -1083,7 +1119,8 @@ export default function App() {
       const nextExpenses = [newExpense, ...activeGroup.expenses];
       const nextMasters = upsertExpenseMaster(
         activeGroup.expenseMasters || [],
-        title
+        title,
+        category
       );
       try {
         await updateDoc(doc(db, "groups", activeGroup.id), {
@@ -1106,6 +1143,7 @@ export default function App() {
       expenseTitle,
       expenseAmount,
       expenseDate,
+      expenseCategory,
       expenseCurrency,
       expenseFxRate,
       baseCurrency,
@@ -1126,6 +1164,7 @@ export default function App() {
       if (!title || Number.isNaN(originalAmount) || originalAmount <= 0) return;
       const spentOn = expenseDate.trim();
       if (!/^\d{4}-\d{2}-\d{2}$/.test(spentOn)) return;
+      const category = (expenseCategory || DEFAULT_CATEGORY).trim() || DEFAULT_CATEGORY;
       const fxRate =
         expenseCurrency === baseCurrency ? 1 : parseAmount(expenseFxRate);
       if (!fxRate || fxRate <= 0) return;
@@ -1153,6 +1192,7 @@ export default function App() {
               id: expense.id,
               title,
               amount,
+              category,
               currency: expenseCurrency,
               originalAmount,
               fxRate,
@@ -1168,7 +1208,8 @@ export default function App() {
 
       const nextMasters = upsertExpenseMaster(
         activeGroup.expenseMasters || [],
-        title
+        title,
+        category
       );
       try {
         await updateDoc(doc(db, "groups", activeGroup.id), {
@@ -1192,6 +1233,7 @@ export default function App() {
       expenseTitle,
       expenseAmount,
       expenseDate,
+      expenseCategory,
       expenseCurrency,
       expenseFxRate,
       baseCurrency,
@@ -1225,6 +1267,7 @@ export default function App() {
         expense.spentOn ||
           (expense.createdAt ? expense.createdAt.slice(0, 10) : todayLocalDateString())
       );
+      setExpenseCategory(expense.category || DEFAULT_CATEGORY);
       setExpenseCurrency(expenseCurrencyValue);
       setExpenseFxRate(
         expense.fxRate ? String(expense.fxRate) : "1"
@@ -1282,6 +1325,7 @@ export default function App() {
     setExpenseCurrency(activeGroup.currency || "USD");
     setExpenseFxRate("1");
     setExpenseDate(todayLocalDateString());
+    setExpenseCategory(DEFAULT_CATEGORY);
   }, [activeGroup, editingExpenseId]);
 
   useEffect(() => {
@@ -1307,6 +1351,23 @@ export default function App() {
   const settlements = useMemo(() => {
     return activeGroup ? computeSettlements(balances) : [];
   }, [activeGroup, balances]);
+
+  const groupTotalSpent = useMemo(() => {
+    if (!activeGroup) return 0;
+    return activeGroup.expenses.reduce((sum, expense) => sum + expense.amount, 0);
+  }, [activeGroup]);
+
+  const groupCategoryTotals = useMemo(() => {
+    if (!activeGroup) return [];
+    const totals: Record<string, number> = {};
+    activeGroup.expenses.forEach((expense) => {
+      const category = (expense.category || DEFAULT_CATEGORY).trim() || DEFAULT_CATEGORY;
+      totals[category] = (totals[category] || 0) + expense.amount;
+    });
+    return Object.entries(totals)
+      .map(([category, total]) => ({ category, total }))
+      .sort((a, b) => b.total - a.total);
+  }, [activeGroup]);
 
   const memberPaidById = useMemo(() => {
     if (!activeGroup) return {} as Record<string, number>;
@@ -1567,6 +1628,7 @@ export default function App() {
       [
         "Group",
         "Date",
+        "Category",
         "Title",
         "Amount",
         "Base Currency",
@@ -1581,6 +1643,7 @@ export default function App() {
       rows.push([
         activeGroup.name,
         expense.spentOn || expense.createdAt,
+        expense.category || DEFAULT_CATEGORY,
         expense.title,
         formatMoney(expense.amount),
         activeGroup.currency,
@@ -1599,11 +1662,44 @@ export default function App() {
     );
   }, [activeGroup]);
 
+  const exportGroupCategorySummaryCsv = useCallback(() => {
+    if (!activeGroup) return;
+    const rows: (string | number)[][] = [
+      ["Group", "Category", "Total", "Currency", "Percent"]
+    ];
+    const total = activeGroup.expenses.reduce(
+      (sum, expense) => sum + expense.amount,
+      0
+    );
+    const totals: Record<string, number> = {};
+    activeGroup.expenses.forEach((expense) => {
+      const category = (expense.category || DEFAULT_CATEGORY).trim() || DEFAULT_CATEGORY;
+      totals[category] = (totals[category] || 0) + expense.amount;
+    });
+    Object.entries(totals)
+      .sort((a, b) => b[1] - a[1])
+      .forEach(([category, amount]) => {
+        const pct = total > 0 ? (amount / total) * 100 : 0;
+        rows.push([
+          activeGroup.name,
+          category,
+          formatMoney(amount),
+          activeGroup.currency || "USD",
+          `${pct.toFixed(1)}%`
+        ]);
+      });
+    downloadCsv(
+      `${activeGroup.name.replace(/\\s+/g, "-").toLowerCase()}-category-summary.csv`,
+      rows
+    );
+  }, [activeGroup]);
+
   const exportAllCsv = useCallback(() => {
     const rows: (string | number)[][] = [
       [
         "Group",
         "Date",
+        "Category",
         "Title",
         "Amount",
         "Base Currency",
@@ -1620,6 +1716,7 @@ export default function App() {
       rows.push([
         expense.groupName,
         expense.spentOn || expense.createdAt,
+        expense.category || DEFAULT_CATEGORY,
         expense.title,
         formatMoney(expense.amount),
         expense.groupCurrency,
@@ -1633,6 +1730,81 @@ export default function App() {
 
     downloadCsv("tripsplit-all-expenses.csv", rows);
   }, [allExpenses, memberNameByGroup]);
+
+  const exportSelectedGroupCsv = useCallback(() => {
+    const group = state.groups.find((item) => item.id === masterExportGroupId);
+    if (!group) return;
+    const memberNames: Record<string, string> = {};
+    group.members.forEach((member) => {
+      memberNames[member.id] = member.name;
+    });
+    const rows: (string | number)[][] = [
+      [
+        "Group",
+        "Date",
+        "Category",
+        "Title",
+        "Amount",
+        "Base Currency",
+        "Original Amount",
+        "Original Currency",
+        "Paid By",
+        "Split Between",
+        "Split Mode"
+      ]
+    ];
+    group.expenses.forEach((expense) => {
+      rows.push([
+        group.name,
+        expense.spentOn || expense.createdAt,
+        expense.category || DEFAULT_CATEGORY,
+        expense.title,
+        formatMoney(expense.amount),
+        group.currency || "USD",
+        formatMoney(expense.originalAmount ?? expense.amount),
+        expense.currency || group.currency || "USD",
+        memberNames[expense.paidBy] || "",
+        (expense.splitBetween || [])
+          .map((id) => memberNames[id] || id)
+          .join(" | "),
+        expense.splitMode || "equal"
+      ]);
+    });
+    downloadCsv(
+      `${group.name.replace(/\\s+/g, "-").toLowerCase()}-expenses.csv`,
+      rows
+    );
+  }, [state.groups, masterExportGroupId]);
+
+  const exportSelectedGroupCategorySummaryCsv = useCallback(() => {
+    const group = state.groups.find((item) => item.id === masterExportGroupId);
+    if (!group) return;
+    const rows: (string | number)[][] = [
+      ["Group", "Category", "Total", "Currency", "Percent"]
+    ];
+    const total = group.expenses.reduce((sum, expense) => sum + expense.amount, 0);
+    const totals: Record<string, number> = {};
+    group.expenses.forEach((expense) => {
+      const category = (expense.category || DEFAULT_CATEGORY).trim() || DEFAULT_CATEGORY;
+      totals[category] = (totals[category] || 0) + expense.amount;
+    });
+    Object.entries(totals)
+      .sort((a, b) => b[1] - a[1])
+      .forEach(([category, amount]) => {
+        const pct = total > 0 ? (amount / total) * 100 : 0;
+        rows.push([
+          group.name,
+          category,
+          formatMoney(amount),
+          group.currency || "USD",
+          `${pct.toFixed(1)}%`
+        ]);
+      });
+    downloadCsv(
+      `${group.name.replace(/\\s+/g, "-").toLowerCase()}-category-summary.csv`,
+      rows
+    );
+  }, [state.groups, masterExportGroupId]);
 
   const handlePrint = useCallback(() => {
     window.print();
@@ -1850,9 +2022,34 @@ export default function App() {
             <Icon name="download" />
             <h2>Export</h2>
           </div>
+          <div className="field">
+            <span>Group</span>
+            <div className="select-row">
+              <select
+                value={masterExportGroupId}
+                onChange={(event) => setMasterExportGroupId(event.target.value)}
+              >
+                {state.groups.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.name}
+                  </option>
+                ))}
+              </select>
+              <button className="pill" onClick={exportSelectedGroupCsv} disabled={!masterExportGroupId}>
+                <Icon name="download" /> Expenses CSV
+              </button>
+              <button
+                className="pill"
+                onClick={exportSelectedGroupCategorySummaryCsv}
+                disabled={!masterExportGroupId}
+              >
+                <Icon name="download" /> Summary CSV
+              </button>
+            </div>
+          </div>
           <div className="select-row">
             <button className="pill" onClick={exportAllCsv}>
-              <Icon name="download" /> CSV
+              <Icon name="download" /> All expenses CSV
             </button>
             <button className="pill" onClick={handlePrint}>
               <Icon name="printer" /> Print/PDF
@@ -1913,6 +2110,7 @@ export default function App() {
                     <div className="row-meta">
                       {expense.groupName} ·{" "}
                       {formatSpentOnLabel(expense.spentOn || expense.createdAt)} ·
+                      {" "}{expense.category || DEFAULT_CATEGORY} ·
                       {" "}Paid by{" "}
                       {memberNameByGroup[expense.groupId]?.[expense.paidBy] ||
                         "Unknown"}
@@ -2274,6 +2472,13 @@ export default function App() {
           <span>Expenses</span>
         </button>
         <button
+          className={groupSection === "summary" ? "active" : ""}
+          onClick={() => setGroupSection("summary")}
+        >
+          <Icon name="balance" />
+          <span>Summary</span>
+        </button>
+        <button
           className={groupSection === "settings" ? "active" : ""}
           onClick={() => setGroupSection("settings")}
         >
@@ -2473,7 +2678,10 @@ export default function App() {
                         type="button"
                         key={item.id}
                         className="pill"
-                        onClick={() => setExpenseTitle(item.title)}
+                        onClick={() => {
+                          setExpenseTitle(item.title);
+                          if (item.category) setExpenseCategory(item.category);
+                        }}
                       >
                         <Icon name="receipt" /> {item.title}
                       </button>
@@ -2481,6 +2689,20 @@ export default function App() {
                   </div>
                 </div>
               ) : null}
+              <div className="field">
+                <span>Category</span>
+                <select
+                  className="full-select"
+                  value={expenseCategory}
+                  onChange={(event) => setExpenseCategory(event.target.value)}
+                >
+                  {categoryOptions.map((category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="field">
                 <span>Date</span>
                 <button
@@ -2727,6 +2949,7 @@ export default function App() {
                   <div className="row-title">{expense.title}</div>
                   <div className="row-meta">
                     {formatSpentOnLabel(expense.spentOn || expense.createdAt)} ·
+                    {" "}{expense.category || DEFAULT_CATEGORY} ·
                     {" "}Paid by{" "}
                     {activeGroup.members.find((m) => m.id === expense.paidBy)?.name ||
                       ""}
@@ -2766,6 +2989,54 @@ export default function App() {
                 </div>
               </div>
             ))
+          )}
+        </section>
+      ) : null}
+
+      {groupSection === "summary" ? (
+        <section className="tab-section">
+          <div className="panel-head">
+            <p className="panel-kicker">Report</p>
+            <div className="section-heading">
+              <Icon name="balance" />
+              <h2>Category summary</h2>
+            </div>
+            <p className="panel-subtitle">
+              Totals by category for this group.
+            </p>
+          </div>
+
+          <div className="card">
+            <div className="stat-row">
+              <span>Total spent</span>
+              <strong>{formatCurrencyValue(groupTotalSpent, baseCurrency)}</strong>
+            </div>
+            <div className="select-row">
+              <button className="pill" onClick={exportGroupCategorySummaryCsv}>
+                <Icon name="download" /> Export summary CSV
+              </button>
+              <button className="pill" onClick={exportGroupCsv}>
+                <Icon name="download" /> Export expenses CSV
+              </button>
+            </div>
+          </div>
+
+          {groupCategoryTotals.length === 0 ? (
+            <p className="muted">No expenses yet.</p>
+          ) : (
+            groupCategoryTotals.map((row) => {
+              const pct =
+                groupTotalSpent > 0 ? (row.total / groupTotalSpent) * 100 : 0;
+              return (
+                <div className="row" key={row.category}>
+                  <div>
+                    <div className="row-title">{row.category}</div>
+                    <div className="row-meta">{pct.toFixed(1)}%</div>
+                  </div>
+                  <strong>{formatCurrencyValue(row.total, baseCurrency)}</strong>
+                </div>
+              );
+            })
           )}
         </section>
       ) : null}
@@ -2814,6 +3085,9 @@ export default function App() {
           <div className="field">
             <span>Export</span>
             <div className="select-row">
+              <button className="pill" onClick={exportGroupCategorySummaryCsv}>
+                <Icon name="download" /> Summary CSV
+              </button>
               <button className="pill" onClick={exportGroupCsv}>
                 <Icon name="download" /> CSV
               </button>
