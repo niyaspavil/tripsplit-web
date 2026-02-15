@@ -526,6 +526,35 @@ section {
   box-shadow: var(--shadow);
 }
 
+details.card {
+  padding: 0;
+  overflow: hidden;
+}
+
+details.card > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 16px;
+}
+
+details.card > summary::-webkit-details-marker {
+  display: none;
+}
+
+.expense-summary-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.expense-summary-body {
+  padding: 0 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 input {
   border: none;
   border-radius: var(--radius-control);
